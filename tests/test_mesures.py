@@ -51,3 +51,31 @@ def test_accueil_ne_peut_pas_prendre_de_mesures_403(client, headers, client_id):
 
 def test_mesures_client_inconnu_404(client, headers):
     assert prendre(client, headers["tailleur"], 9999).status_code == 404
+
+
+def test_rg3_historique_et_dernieres_mesures(client, headers, client_id):
+    h = headers["tailleur"]
+    prendre(client, h, client_id, tour_taille=80, date_prise="2026-01-10")
+    prendre(client, h, client_id, tour_taille=84, date_prise="2026-03-01")
+    prendre(client, h, client_id, tour_taille=82, date_prise="2026-02-01")
+
+    r = client.get(f"{API}/clients/{client_id}/mesures", headers=headers["accueil"])
+    assert r.status_code == 200
+    assert [m["date_prise"] for m in r.json()] == ["2026-03-01", "2026-02-01", "2026-01-10"]
+
+    r = client.get(f"{API}/clients/{client_id}/mesures/derniere", headers=headers["accueil"])
+    assert r.status_code == 200
+    assert r.json()["date_prise"] == "2026-03-01" and r.json()["tour_taille"] == 84
+
+
+def test_dernieres_mesures_404_si_aucune(client, headers, client_id):
+    r = client.get(f"{API}/clients/{client_id}/mesures/derniere", headers=headers["accueil"])
+    assert r.status_code == 404 and "aucune prise de mesures" in r.json()["detail"]
+    assert client.get(f"{API}/clients/9999/mesures", headers=headers["accueil"]).status_code == 404
+
+
+def test_detail_mesure_et_404(client, headers, client_id):
+    mid = prendre(client, headers["tailleur"], client_id).json()["id"]
+    r = client.get(f"{API}/mesures/{mid}", headers=headers["accueil"])
+    assert r.status_code == 200 and r.json()["id"] == mid
+    assert client.get(f"{API}/mesures/9999", headers=headers["accueil"]).status_code == 404
