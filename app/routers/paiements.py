@@ -20,3 +20,9 @@ def encaisser(commande_id: int, donnees: PaiementCreate, db: Session = Depends(g
     db.commit()
     db.refresh(paiement)
     return paiement
+
+
+@router.get("/commandes/{commande_id}/paiements", response_model=list[PaiementRead],
+            summary="Paiements de la commande, dans l'ordre de saisie")
+def lister(commande_id: int, db: Session = Depends(get_db)):
+    return service.paiements_commande(db, commande_id)

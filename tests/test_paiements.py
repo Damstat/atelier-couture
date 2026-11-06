@@ -67,3 +67,13 @@ def test_encaisser_mode_invalide_404_et_droits(client, headers, commande):
     assert payer(client, headers["accueil"], 9999, 1000).status_code == 404
     assert payer(client, headers["tailleur"], commande["id"], 1000).status_code == 403
     assert payer(client, headers["admin"], commande["id"], 1000).status_code == 201
+
+
+def test_lister_paiements_dans_l_ordre_de_saisie(client, headers, commande):
+    payer(client, headers["accueil"], commande["id"], 10000, mode="wave")
+    payer(client, headers["accueil"], commande["id"], 5000, mode="especes",
+          date_paiement=(date.today() - timedelta(days=3)).isoformat())
+    r = client.get(f"{URL}/{commande['id']}/paiements", headers=headers["tailleur"])
+    assert r.status_code == 200
+    assert [(p["montant"], p["mode"]) for p in r.json()] == [(10000, "wave"), (5000, "especes")]
+    assert client.get(f"{URL}/9999/paiements", headers=headers["tailleur"]).status_code == 404

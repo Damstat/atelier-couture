@@ -41,3 +41,8 @@ def encaisser(db: Session, commande_id: int, donnees: PaiementCreate, auteur: Ut
     recalculer_paye(commande)
     db.flush()
     return paiement
+
+
+def paiements_commande(db: Session, commande_id: int) -> list[Paiement]:
+    """Paiements dans l'ordre de saisie."""
+    return list(obtenir_commande(db, commande_id).paiements)
