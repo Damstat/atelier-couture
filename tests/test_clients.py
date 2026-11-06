@@ -37,3 +37,45 @@ def test_creer_client_champs_obligatoires_422(client, headers):
 
 def test_creer_client_genre_invalide_422(client, headers):
     assert creer(client, headers["accueil"], genre="autre").status_code == 422
+
+
+def _peupler(client, h):
+    creer(client, h, nom="Diop", prenom="Fatou", telephone="771234567", genre="femme")
+    creer(client, h, nom="Ba", prenom="Moussa", telephone="781112233", genre="homme")
+    creer(client, h, nom="Diop", prenom="Awa", telephone="769998877", genre="femme")
+    creer(client, h, nom="Sow", prenom="Ali", telephone="701234500", genre="enfant")
+
+
+def test_lister_clients_pagine_trie_par_nom_puis_prenom(client, headers):
+    _peupler(client, headers["accueil"])
+    r = client.get(URL, headers=headers["tailleur"])
+    assert r.status_code == 200
+    corps = r.json()
+    assert corps["total"] == 4 and corps["limit"] == 20 and corps["offset"] == 0
+    assert [(c["nom"], c["prenom"]) for c in corps["items"]] == [
+        ("Ba", "Moussa"), ("Diop", "Awa"), ("Diop", "Fatou"), ("Sow", "Ali")]
+
+    r = client.get(URL, params={"limit": 2, "offset": 1}, headers=headers["tailleur"]).json()
+    assert r["total"] == 4 and [c["prenom"] for c in r["items"]] == ["Awa", "Fatou"]
+
+
+def test_lister_clients_recherche_q(client, headers):
+    _peupler(client, headers["accueil"])
+    h = headers["accueil"]
+    assert [c["prenom"] for c in client.get(URL, params={"q": "diop"}, headers=h).json()["items"]] == ["Awa", "Fatou"]
+    assert [c["prenom"] for c in client.get(URL, params={"q": "mou"}, headers=h).json()["items"]] == ["Moussa"]
+    assert [c["prenom"] for c in client.get(URL, params={"q": "77 123"}, headers=h).json()["items"]] == ["Fatou"]
+
+
+def test_lister_clients_filtre_genre(client, headers):
+    _peupler(client, headers["accueil"])
+    r = client.get(URL, params={"genre": "enfant"}, headers=headers["accueil"]).json()
+    assert r["total"] == 1 and r["items"][0]["prenom"] == "Ali"
+
+
+def test_lister_clients_parametres_invalides_422(client, headers):
+    h = headers["accueil"]
+    r = client.get(URL, params={"q": "a"}, headers=h)
+    assert r.status_code == 422 and "2 caractères" in r.json()["detail"]
+    assert client.get(URL, params={"limit": 101}, headers=h).status_code == 422
+    assert client.get(URL, params={"offset": -1}, headers=h).status_code == 422

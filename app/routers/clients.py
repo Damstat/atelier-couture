@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import Pagination, get_current_user
+from app.models.enums import Genre
 from app.schemas.client import ClientCreate, ClientRead
+from app.schemas.common import Page
 from app.services import clients as service
 
 # Tout utilisateur connecté (sauf indication contraire sur la route)
@@ -17,3 +19,14 @@ def creer(donnees: ClientCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(client)
     return client
+
+
+@router.get("", response_model=Page[ClientRead], summary="Liste paginée des clients (triés par nom, prénom)")
+def lister(
+    q: str | None = Query(None, description="Recherche dans nom, prénom et téléphone (2 caractères minimum)"),
+    genre: Genre | None = None,
+    pagination: Pagination = Depends(),
+    db: Session = Depends(get_db),
+):
+    items, total = service.lister_clients(db, pagination.limit, pagination.offset, q, genre)
+    return Page[ClientRead](items=items, total=total, limit=pagination.limit, offset=pagination.offset)
