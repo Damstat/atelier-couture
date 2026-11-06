@@ -91,3 +91,4 @@ class HistoriqueStatut(Base):
     )
 
     commande: Mapped["Commande"] = relationship(back_populates="historique")
+    utilisateur: Mapped["Utilisateur | None"] = relationship()

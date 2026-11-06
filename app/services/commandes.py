@@ -273,3 +273,20 @@ def changer_statut(db: Session, commande_id: int, donnees: ChangementStatut, aut
     enregistrer_statut(commande, demande, auteur, commentaire)  # RG15
     db.flush()
     return commande
+
+
+def historique_commande(db: Session, commande_id: int) -> list[dict]:
+    """RG15 : changements de statut dans l'ordre chronologique."""
+    commande = obtenir_commande(db, commande_id)
+    return [
+        {
+            "id": h.id,
+            "ancien_statut": h.ancien_statut,
+            "nouveau_statut": h.nouveau_statut,
+            "commentaire": h.commentaire,
+            "utilisateur_id": h.utilisateur_id,
+            "utilisateur_nom": h.utilisateur.nom_complet if h.utilisateur else None,
+            "date_changement": h.date_changement,
+        }
+        for h in commande.historique  # relation triée par id = ordre d'insertion
+    ]

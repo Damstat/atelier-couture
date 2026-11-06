@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -69,3 +69,13 @@ class CommandeDetail(CommandeResume):
     lignes: list[LigneRead]
     paiements: list[PaiementRead]
     livraison: LivraisonRead | None
+
+
+class HistoriqueRead(BaseModel):
+    id: int
+    ancien_statut: StatutCommande | None
+    nouveau_statut: StatutCommande
+    commentaire: str | None
+    utilisateur_id: int | None
+    utilisateur_nom: str | None
+    date_changement: datetime

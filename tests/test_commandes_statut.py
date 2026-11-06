@@ -77,3 +77,20 @@ def test_statut_invalide_422_et_commande_inconnue_404(client, headers, cid):
     assert statut(client, headers["accueil"], cid, "perdue").status_code == 422
     assert statut(client, headers["accueil"], 9999, "en_coupe").status_code == 404
     assert client.post(f"{URL}/{cid}/statut", json={"statut": "en_coupe"}).status_code == 401
+
+
+def test_historique_chronologique_avec_auteurs(client, headers, cid):
+    statut(client, headers["tailleur"], cid, "en_coupe")
+    statut(client, headers["accueil"], cid, "annulee", "client parti")
+    r = client.get(f"{URL}/{cid}/historique", headers=headers["tailleur"])
+    assert r.status_code == 200
+    assert [(h["ancien_statut"], h["nouveau_statut"], h["utilisateur_nom"], h["commentaire"]) for h in r.json()] == [
+        (None, "en_attente", "Awa Accueil", None),
+        ("en_attente", "en_coupe", "Moussa Tailleur", None),
+        ("en_coupe", "annulee", "Awa Accueil", "client parti"),
+    ]
+    assert all(h["date_changement"] for h in r.json())
+
+
+def test_historique_commande_inconnue_404(client, headers):
+    assert client.get(f"{URL}/9999/historique", headers=headers["tailleur"]).status_code == 404

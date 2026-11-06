@@ -7,7 +7,6 @@ from tests.factories import URL_COMMANDES as URL
 from tests.factories import corps_commande, creer_commande as creer
 
 
-
 def test_creer_commande_201_tout_est_calcule_par_le_serveur(client, headers, donnees, utilisateurs):
     r = creer(client, headers["accueil"], corps_commande(donnees))
     assert r.status_code == 201, r.text
