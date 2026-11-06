@@ -133,3 +133,22 @@ def test_top_clients_limite_et_periode_large(client, headers, stats):
     assert len(r) == 1 and r[0]["client_nom"] == "Fatou Diop"
     assert r[0]["nb_commandes"] == 2 and r[0]["chiffre_affaires"] == 82000 and r[0]["solde_du"] == 62000
     assert get(client, headers, "top-clients", limite=0).status_code == 422
+
+
+def test_impayes_les_plus_urgents_d_abord(client, headers, stats):
+    r = get(client, headers, "impayes")
+    assert r.status_code == 200
+    corps = r.json()
+    # c5 (prévue hier, 12 000) puis c1 (prévue dans 7 jours, 50 000) ; annulée et soldées exclues
+    assert corps["total"] == 2
+    assert [(c["numero"], c["solde"]) for c in corps["items"]] == [("CMD-5", 12000), ("CMD-1", 50000)]
+    assert corps["items"][0]["en_retard"] is True
+    page = get(client, headers, "impayes", limit=1, offset=1).json()
+    assert page["total"] == 2 and [c["numero"] for c in page["items"]] == ["CMD-1"]
+
+
+@pytest.mark.parametrize("chemin", ["chiffre-affaires", "types-vetement", "top-clients", "impayes"])
+def test_toutes_les_statistiques_reservees_a_l_admin(client, headers, chemin):
+    assert client.get(f"{URL}/{chemin}", headers=headers["accueil"]).status_code == 403
+    assert client.get(f"{URL}/{chemin}", headers=headers["tailleur"]).status_code == 403
+    assert client.get(f"{URL}/{chemin}").status_code == 401
