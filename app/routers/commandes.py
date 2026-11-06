@@ -7,7 +7,7 @@ from app.database import get_db
 from app.dependencies import Pagination, get_current_user, require_roles
 from app.models import Utilisateur
 from app.models.enums import Role, StatutCommande
-from app.schemas.commande import CommandeCreate, CommandeDetail, CommandeResume
+from app.schemas.commande import ChangementStatut, CommandeCreate, CommandeDetail, CommandeResume
 from app.schemas.common import Page
 from app.services import commandes as service
 
@@ -49,3 +49,13 @@ def lister(
             summary="Détail : lignes, paiements, livraison, solde, retard")
 def detail(commande_id: int, db: Session = Depends(get_db)):
     return service.vers_detail(service.obtenir_commande(db, commande_id))
+
+
+@router.post("/{commande_id}/statut", response_model=CommandeDetail,
+             summary="Changer le statut selon le workflow (RG13, RG14)")
+def changer_statut(commande_id: int, donnees: ChangementStatut, db: Session = Depends(get_db),
+                   auteur: Utilisateur = Depends(get_current_user)):
+    commande = service.changer_statut(db, commande_id, donnees, auteur)
+    db.commit()
+    db.refresh(commande)
+    return service.vers_detail(commande)

@@ -27,6 +27,13 @@ class CommandeCreate(BaseModel):
     notes: str | None = None
 
 
+class ChangementStatut(BaseModel):
+    statut: StatutCommande
+    commentaire: str | None = Field(
+        default=None, description="Obligatoire pour annuler une commande qui a reçu un acompte (RG14)"
+    )
+
+
 class LigneRead(BaseModel):
     id: int
     type_vetement_id: int

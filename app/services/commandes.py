@@ -6,11 +6,12 @@ from uuid import uuid4
 from sqlalchemy import and_, not_, select
 from sqlalchemy.orm import Session
 
-from app.exceptions import Conflit, DonneesInvalides, Introuvable
+from app.exceptions import Conflit, DonneesInvalides, Interdit, Introuvable
 from app.models import Client, Commande, HistoriqueStatut, LigneCommande, Mesure, TypeVetement, Utilisateur
-from app.models.enums import StatutCommande
-from app.schemas.commande import CommandeCreate, LigneCreate
+from app.models.enums import Role, StatutCommande
+from app.schemas.commande import ChangementStatut, CommandeCreate, LigneCreate
 from app.services.pagination import paginer
+from app.services.workflow import verifier_transition
 
 STATUTS_FINAUX = {StatutCommande.livree, StatutCommande.annulee}
 
@@ -247,5 +248,28 @@ def creer_commande(db: Session, donnees: CommandeCreate, auteur: Utilisateur) ->
     db.add(commande)
     db.flush()
     commande.numero = numero_commande(aujourd_hui.year, commande.id)
+    db.flush()
+    return commande
+
+
+# ---------- Statuts ----------
+
+def changer_statut(db: Session, commande_id: int, donnees: ChangementStatut, auteur: Utilisateur) -> Commande:
+    commande = obtenir_commande(db, commande_id)
+    demande = donnees.statut
+    commentaire = (donnees.commentaire or "").strip() or None
+
+    # RG14 : le tailleur ne peut pas annuler une commande
+    if demande == StatutCommande.annulee and auteur.role == Role.tailleur:
+        raise Interdit("Le tailleur ne peut pas annuler une commande : adressez-vous à l'accueil.")
+    # Workflow et RG13 (409 avec les statuts possibles)
+    verifier_transition(commande.statut, demande)
+    # RG14 : annuler une commande qui a reçu un acompte exige un commentaire
+    if demande == StatutCommande.annulee and commande.montant_paye > 0 and commentaire is None:
+        raise DonneesInvalides(
+            f"Cette commande a reçu {commande.montant_paye} FCFA : indiquez dans « commentaire » "
+            "le sort de l'argent (remboursement, avoir...)."
+        )
+    enregistrer_statut(commande, demande, auteur, commentaire)  # RG15
     db.flush()
     return commande
