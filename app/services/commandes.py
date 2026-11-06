@@ -320,3 +320,37 @@ def modifier_commande(db: Session, commande_id: int, donnees: CommandeUpdate) ->
         commande.notes = champs["notes"]
     db.flush()
     return commande
+
+
+# ---------- Lignes (RG10) ----------
+
+def verifier_lignes_modifiables(commande: Commande) -> None:
+    """RG10 : les lignes ne sont modifiables que tant que la commande est « en_attente »."""
+    if commande.statut != StatutCommande.en_attente:
+        raise Conflit(
+            f"Les prestations de la commande {commande.numero} ne sont plus modifiables : "
+            f"elle est « {commande.statut.value} » (modifiable seulement en « en_attente »)."
+        )
+
+
+def ajouter_ligne(db: Session, commande_id: int, donnees: LigneCreate) -> Commande:
+    commande = obtenir_commande(db, commande_id)
+    verifier_lignes_modifiables(commande)
+    commande.lignes.append(construire_ligne(db, donnees))  # RG6
+    recalculer_montants(commande)  # RG7
+    db.flush()
+    return commande
+
+
+def retirer_ligne(db: Session, commande_id: int, ligne_id: int) -> Commande:
+    commande = obtenir_commande(db, commande_id)
+    ligne = next((l for l in commande.lignes if l.id == ligne_id), None)
+    if ligne is None:
+        raise Introuvable(f"Ligne {ligne_id} introuvable dans la commande {commande.numero}.")
+    verifier_lignes_modifiables(commande)
+    if len(commande.lignes) == 1:
+        raise Conflit("Une commande garde toujours au moins une prestation : ajoutez-en une autre avant de retirer celle-ci.")
+    commande.lignes.remove(ligne)
+    recalculer_montants(commande)  # RG7
+    db.flush()
+    return commande

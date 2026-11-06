@@ -9,6 +9,7 @@ from app.models import Utilisateur
 from app.models.enums import Role, StatutCommande
 from app.schemas.commande import (
     ChangementStatut, CommandeCreate, CommandeDetail, CommandeResume, CommandeUpdate, HistoriqueRead,
+    LigneCreate,
 )
 from app.schemas.common import Page
 from app.services import commandes as service
@@ -73,6 +74,24 @@ def historique(commande_id: int, db: Session = Depends(get_db)):
               summary="Modifier mesure, date prévue, remise, notes (accueil) ; montants recalculés")
 def modifier(commande_id: int, donnees: CommandeUpdate, db: Session = Depends(get_db)):
     commande = service.modifier_commande(db, commande_id, donnees)
+    db.commit()
+    db.refresh(commande)
+    return service.vers_detail(commande)
+
+
+@router.post("/{commande_id}/lignes", response_model=CommandeDetail, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(accueil)], summary="Ajouter une prestation (accueil, RG10)")
+def ajouter_ligne(commande_id: int, donnees: LigneCreate, db: Session = Depends(get_db)):
+    commande = service.ajouter_ligne(db, commande_id, donnees)
+    db.commit()
+    db.refresh(commande)
+    return service.vers_detail(commande)
+
+
+@router.delete("/{commande_id}/lignes/{ligne_id}", response_model=CommandeDetail,
+               dependencies=[Depends(accueil)], summary="Retirer une prestation (accueil, RG10)")
+def retirer_ligne(commande_id: int, ligne_id: int, db: Session = Depends(get_db)):
+    commande = service.retirer_ligne(db, commande_id, ligne_id)
     db.commit()
     db.refresh(commande)
     return service.vers_detail(commande)
