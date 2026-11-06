@@ -1,0 +1,53 @@
+from datetime import date
+
+import pytest
+
+API = "/api/v1"
+
+
+@pytest.fixture()
+def client_id(db):
+    from app.models import Client
+
+    c = Client(nom="Diop", prenom="Fatou", telephone="771234567")
+    db.add(c)
+    db.commit()
+    return c.id
+
+
+def prendre(client, h, cid, **valeurs):
+    return client.post(f"{API}/clients/{cid}/mesures", json=valeurs or {"tour_taille": 80}, headers=h)
+
+
+def test_tailleur_prend_des_mesures_201(client, headers, utilisateurs, client_id):
+    r = prendre(client, headers["tailleur"], client_id, tour_taille=82.5, longueur_robe=120, notes="cliente debout")
+    assert r.status_code == 201
+    corps = r.json()
+    assert corps["tour_taille"] == 82.5 and corps["longueur_robe"] == 120
+    assert corps["tour_cou"] is None
+    assert corps["date_prise"] == date.today().isoformat()
+    assert corps["prise_par_id"] == utilisateurs["tailleur"].id
+    assert corps["client_id"] == client_id
+
+
+def test_date_prise_fournie(client, headers, client_id):
+    r = prendre(client, headers["tailleur"], client_id, tour_cou=38, date_prise="2026-01-15")
+    assert r.json()["date_prise"] == "2026-01-15"
+
+
+def test_rg2_prise_vide_ou_hors_bornes_422(client, headers, client_id):
+    h = headers["tailleur"]
+    r = client.post(f"{API}/clients/{client_id}/mesures", json={"notes": "rien"}, headers=h)
+    assert r.status_code == 422 and "au moins une mesure" in r.json()["detail"]
+    r = prendre(client, h, client_id, tour_taille=0)
+    assert r.status_code == 422 and "tour_taille" in r.json()["detail"]
+    assert prendre(client, h, client_id, tour_taille=301).status_code == 422
+
+
+def test_accueil_ne_peut_pas_prendre_de_mesures_403(client, headers, client_id):
+    assert prendre(client, headers["accueil"], client_id).status_code == 403
+    assert prendre(client, headers["admin"], client_id).status_code == 201
+
+
+def test_mesures_client_inconnu_404(client, headers):
+    assert prendre(client, headers["tailleur"], 9999).status_code == 404
