@@ -66,3 +66,43 @@ def client(engine):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+MOT_DE_PASSE = "motdepasse123"
+_HASH = None
+
+
+def _hash_mot_de_passe() -> str:
+    # Argon2 est volontairement lent : on ne hache qu'une fois pour toute la session
+    global _HASH
+    if _HASH is None:
+        from app.security import hacher_mot_de_passe
+
+        _HASH = hacher_mot_de_passe(MOT_DE_PASSE)
+    return _HASH
+
+
+@pytest.fixture()
+def utilisateurs(db):
+    """Un compte par rôle : {"admin": Utilisateur, "accueil": ..., "tailleur": ...}."""
+    from app.models import Utilisateur
+    from app.models.enums import Role
+
+    comptes = {}
+    for role, nom in [(Role.admin, "Patron"), (Role.accueil, "Awa Accueil"), (Role.tailleur, "Moussa Tailleur")]:
+        u = Utilisateur(
+            email=f"{role.value}@atelier.sn", nom_complet=nom,
+            mot_de_passe_hash=_hash_mot_de_passe(), role=role, actif=True,
+        )
+        db.add(u)
+        comptes[role.value] = u
+    db.commit()
+    return comptes
+
+
+@pytest.fixture()
+def headers(utilisateurs):
+    """En-têtes d'authentification par rôle : headers["accueil"], etc."""
+    from app.security import creer_jeton
+
+    return {role: {"Authorization": f"Bearer {creer_jeton(u.id)}"} for role, u in utilisateurs.items()}
