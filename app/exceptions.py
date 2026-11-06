@@ -27,3 +27,7 @@ class DonneesInvalides(ErreurMetier):
 
 class Interdit(ErreurMetier):
     status_code = 403
+
+
+class NonAuthentifie(ErreurMetier):
+    status_code = 401
