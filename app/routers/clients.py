@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import Pagination, get_current_user
+from app.dependencies import Pagination, get_current_user, require_roles
 from app.models.enums import Genre
 from app.schemas.client import ClientCreate, ClientRead, ClientUpdate
 from app.schemas.common import Page
@@ -43,3 +43,12 @@ def modifier(client_id: int, donnees: ClientUpdate, db: Session = Depends(get_db
     db.commit()
     db.refresh(client)
     return client
+
+
+@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(require_roles())],
+               summary="Supprimer un client et ses mesures (admin, RG4)")
+def supprimer(client_id: int, db: Session = Depends(get_db)):
+    service.supprimer_client(db, client_id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

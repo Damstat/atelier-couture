@@ -1,10 +1,10 @@
 import re
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.exceptions import Conflit, DonneesInvalides, Introuvable
-from app.models import Client
+from app.models import Client, Commande
 from app.models.enums import Genre
 from app.services.pagination import paginer
 from app.schemas.client import ClientCreate, ClientUpdate
@@ -69,3 +69,16 @@ def modifier_client(db: Session, client_id: int, donnees: ClientUpdate) -> Clien
         setattr(client, champ, valeur)
     db.flush()
     return client
+
+
+def supprimer_client(db: Session, client_id: int) -> None:
+    """RG4 : refusé si le client a des commandes ; ses mesures sont supprimées avec lui."""
+    client = obtenir_client(db, client_id)
+    nb = db.scalar(select(func.count()).select_from(Commande).where(Commande.client_id == client.id))
+    if nb:
+        raise Conflit(
+            f"Impossible de supprimer le client {client.prenom} {client.nom} : "
+            f"il a {nb} commande(s) enregistrée(s)."
+        )
+    db.delete(client)
+    db.flush()

@@ -117,3 +117,35 @@ def test_modifier_client_ne_peut_pas_vider_nom_prenom_telephone_422(client, head
         r = client.patch(f"{URL}/{cid}", json=corps, headers=h)
         assert r.status_code == 422, corps
     assert client.patch(f"{URL}/9999", json={"notes": "x"}, headers=h).status_code == 404
+
+
+def test_supprimer_client_204_supprime_aussi_ses_mesures(client, headers, db):
+    from sqlalchemy import select
+
+    from app.models import Mesure
+    from tests.factories import mesure_en_base
+
+    cid = creer(client, headers["accueil"]).json()["id"]
+    mesure_en_base(db, cid)
+    r = client.delete(f"{URL}/{cid}", headers=headers["admin"])
+    assert r.status_code == 204 and r.content == b""
+    assert client.get(f"{URL}/{cid}", headers=headers["admin"]).status_code == 404
+    db.expire_all()
+    assert db.scalars(select(Mesure).where(Mesure.client_id == cid)).all() == []
+
+
+def test_rg4_supprimer_client_avec_commandes_409(client, headers, db):
+    from tests.factories import commande_en_base
+
+    cid = creer(client, headers["accueil"]).json()["id"]
+    commande_en_base(db, cid)
+    r = client.delete(f"{URL}/{cid}", headers=headers["admin"])
+    assert r.status_code == 409
+    assert "1 commande" in r.json()["detail"]
+
+
+def test_supprimer_client_reserve_admin_et_404(client, headers):
+    cid = creer(client, headers["accueil"]).json()["id"]
+    assert client.delete(f"{URL}/{cid}", headers=headers["accueil"]).status_code == 403
+    assert client.delete(f"{URL}/{cid}", headers=headers["tailleur"]).status_code == 403
+    assert client.delete(f"{URL}/9999", headers=headers["admin"]).status_code == 404
