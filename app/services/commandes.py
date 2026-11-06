@@ -1,10 +1,14 @@
 """Règles de gestion des commandes."""
 from collections.abc import Iterable
 from datetime import date, timedelta
+from uuid import uuid4
 
-from app.exceptions import Conflit, DonneesInvalides
-from app.models import Commande
+from sqlalchemy.orm import Session
+
+from app.exceptions import Conflit, DonneesInvalides, Introuvable
+from app.models import Client, Commande, HistoriqueStatut, LigneCommande, Mesure, TypeVetement, Utilisateur
 from app.models.enums import StatutCommande
+from app.schemas.commande import CommandeCreate, LigneCreate
 
 STATUTS_FINAUX = {StatutCommande.livree, StatutCommande.annulee}
 
@@ -89,3 +93,114 @@ def vers_resume(commande: Commande) -> dict:
         "solde": solde(commande),
         "en_retard": est_en_retard(commande),
     }
+
+
+def vers_detail(commande: Commande) -> dict:
+    """Détail complet : lignes (nom de la prestation, sous-total), paiements, livraison."""
+    return {
+        **vers_resume(commande),
+        "mesure_id": commande.mesure_id,
+        "notes": commande.notes,
+        "cree_par_id": commande.cree_par_id,
+        "lignes": [
+            {
+                "id": l.id,
+                "type_vetement_id": l.type_vetement_id,
+                "type_vetement_nom": l.type_vetement.nom,
+                "description": l.description,
+                "quantite": l.quantite,
+                "prix_unitaire": l.prix_unitaire,
+                "sous_total": l.quantite * l.prix_unitaire,
+            }
+            for l in commande.lignes
+        ],
+        "paiements": list(commande.paiements),
+        "livraison": commande.livraison,
+    }
+
+
+# ---------- Création ----------
+
+def numero_commande(annee: int, identifiant: int) -> str:
+    """RG5 : CMD-AAAA-NNNNN, par exemple CMD-2026-00017."""
+    return f"CMD-{annee}-{identifiant:05d}"
+
+
+def enregistrer_statut(
+    commande: Commande, nouveau: StatutCommande, auteur: Utilisateur,
+    commentaire: str | None = None, initial: bool = False,
+) -> None:
+    """RG15 : chaque changement est inscrit dans l'historique (ancien statut vide à la création)."""
+    ancien = None if initial else commande.statut
+    commande.statut = nouveau
+    commande.historique.append(HistoriqueStatut(
+        ancien_statut=ancien, nouveau_statut=nouveau,
+        commentaire=commentaire, utilisateur_id=auteur.id,
+    ))
+
+
+def construire_ligne(db: Session, donnees: LigneCreate) -> LigneCommande:
+    """RG6 : prix du catalogue par défaut ; une prestation inactive ne peut plus être commandée."""
+    prestation = db.get(TypeVetement, donnees.type_vetement_id)
+    if prestation is None:
+        raise Introuvable(f"Prestation {donnees.type_vetement_id} introuvable dans le catalogue.")
+    if not prestation.actif:
+        raise DonneesInvalides(
+            f"La prestation « {prestation.nom} » a été retirée du catalogue et ne peut plus être commandée."
+        )
+    return LigneCommande(
+        type_vetement=prestation,
+        quantite=donnees.quantite,
+        prix_unitaire=donnees.prix_unitaire if donnees.prix_unitaire is not None else prestation.prix_base,
+        description=donnees.description,
+    )
+
+
+def choisir_mesure(db: Session, client: Client, mesure_id: int | None) -> Mesure | None:
+    """RG9 : les mesures doivent appartenir au client ; sans précision, ses dernières mesures."""
+    if mesure_id is None:
+        from app.services.mesures import dernieres_mesures  # import local : évite un import circulaire
+
+        return dernieres_mesures(db, client.id)
+    mesure = db.get(Mesure, mesure_id)
+    if mesure is None:
+        raise Introuvable(f"Prise de mesures {mesure_id} introuvable.")
+    if mesure.client_id != client.id:
+        raise DonneesInvalides(
+            f"La prise de mesures {mesure_id} n'appartient pas au client {client.prenom} {client.nom}."
+        )
+    return mesure
+
+
+def creer_commande(db: Session, donnees: CommandeCreate, auteur: Utilisateur) -> Commande:
+    client = db.get(Client, donnees.client_id)
+    if client is None:
+        raise Introuvable(f"Client {donnees.client_id} introuvable.")
+    mesure = choisir_mesure(db, client, donnees.mesure_id)
+    lignes = [construire_ligne(db, l) for l in donnees.lignes]
+
+    aujourd_hui = date.today()
+    date_prevue = donnees.date_livraison_prevue or date_prevue_par_defaut(
+        aujourd_hui, [l.type_vetement.delai_jours for l in lignes]
+    )
+    verifier_date_prevue(date_prevue, aujourd_hui)
+
+    commande = Commande(
+        numero=f"TMP-{uuid4().hex[:20]}",  # remplacé dès que l'identifiant est connu
+        client=client,
+        mesure_id=mesure.id if mesure else None,
+        date_commande=aujourd_hui,
+        date_livraison_prevue=date_prevue,
+        remise=donnees.remise,
+        montant_paye=0,
+        notes=donnees.notes,
+        cree_par_id=auteur.id,
+        lignes=lignes,
+    )
+    recalculer_montants(commande)
+    enregistrer_statut(commande, StatutCommande.en_attente, auteur, initial=True)
+    db.add(commande)
+    db.flush()
+    commande.numero = numero_commande(aujourd_hui.year, commande.id)
+    db.flush()
+    return commande
