@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.errors import installer_gestionnaires
-from app.routers import auth, utilisateurs
+from app.routers import auth, clients, utilisateurs
 
 API_PREFIX = "/api/v1"
 
@@ -10,6 +10,7 @@ installer_gestionnaires(app)
 
 app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(utilisateurs.router, prefix=API_PREFIX)
+app.include_router(clients.router, prefix=API_PREFIX)
 
 
 @app.get("/health")
