@@ -72,3 +72,27 @@ def test_statistiques_reservees_a_l_admin(client, headers, role):
     r = client.get(f"{URL}/tableau-de-bord", headers=headers[role])
     assert r.status_code == 403
     assert client.get(f"{URL}/tableau-de-bord").status_code == 401
+
+
+def test_chiffre_affaires_par_jour_periode_par_defaut(client, headers, stats):
+    r = get(client, headers, "chiffre-affaires")
+    assert r.status_code == 200
+    ca = r.json()
+    assert ca["date_debut"] == DEBUT_MOIS.isoformat() and ca["date_fin"] == AUJOURD_HUI.isoformat()
+    assert ca["periodes"] == [{"periode": AUJOURD_HUI.isoformat(), "chiffre_affaires": 82000, "encaisse": 32000}]
+
+
+def test_chiffre_affaires_par_mois_seules_les_periodes_actives(client, headers, stats):
+    debut = (DEBUT_MOIS - timedelta(days=90)).isoformat()
+    ca = get(client, headers, "chiffre-affaires", granularite="mois", date_debut=debut).json()
+    assert ca["periodes"] == [
+        {"periode": MOIS_DERNIER.strftime("%Y-%m"), "chiffre_affaires": 42000, "encaisse": 30000},
+        {"periode": AUJOURD_HUI.strftime("%Y-%m"), "chiffre_affaires": 82000, "encaisse": 32000},
+    ]
+    assert ca["total_chiffre_affaires"] == 124000 and ca["total_encaisse"] == 62000
+
+
+def test_chiffre_affaires_parametres_invalides_422(client, headers):
+    r = get(client, headers, "chiffre-affaires", date_debut="2026-05-01", date_fin="2026-04-01")
+    assert r.status_code == 422 and "date_debut" in r.json()["detail"]
+    assert get(client, headers, "chiffre-affaires", granularite="annee").status_code == 422
