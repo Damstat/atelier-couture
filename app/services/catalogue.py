@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.exceptions import Conflit
+from app.exceptions import Conflit, Introuvable
 from app.models import TypeVetement
 from app.schemas.catalogue import TypeVetementCreate
 
@@ -19,4 +19,18 @@ def creer_prestation(db: Session, donnees: TypeVetementCreate) -> TypeVetement:
     prestation = TypeVetement(**donnees.model_dump(), actif=True)
     db.add(prestation)
     db.flush()
+    return prestation
+
+
+def lister_prestations(db: Session, actifs_seulement: bool = True) -> list[TypeVetement]:
+    requete = select(TypeVetement).order_by(TypeVetement.nom)
+    if actifs_seulement:
+        requete = requete.where(TypeVetement.actif.is_(True))
+    return list(db.scalars(requete))
+
+
+def obtenir_prestation(db: Session, prestation_id: int) -> TypeVetement:
+    prestation = db.get(TypeVetement, prestation_id)
+    if prestation is None:
+        raise Introuvable(f"Prestation {prestation_id} introuvable dans le catalogue.")
     return prestation

@@ -16,3 +16,14 @@ def creer(donnees: TypeVetementCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(prestation)
     return prestation
+
+
+@router.get("", response_model=list[TypeVetementRead],
+            summary="Catalogue trié par nom (prestations actives par défaut)")
+def lister(actifs_seulement: bool = True, db: Session = Depends(get_db)):
+    return service.lister_prestations(db, actifs_seulement)
+
+
+@router.get("/{prestation_id}", response_model=TypeVetementRead, summary="Détail d'une prestation")
+def detail(prestation_id: int, db: Session = Depends(get_db)):
+    return service.obtenir_prestation(db, prestation_id)

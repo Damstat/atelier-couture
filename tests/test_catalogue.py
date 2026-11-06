@@ -31,3 +31,33 @@ def test_creer_prestation_reservee_admin(client, headers):
     assert creer(client, headers["accueil"]).status_code == 403
     assert creer(client, headers["tailleur"]).status_code == 403
     assert client.post(URL, json=BOUBOU).status_code == 401
+
+
+def _peupler(client, db, h):
+    from app.models import TypeVetement
+
+    creer(client, h, nom="Robe", prix_base=30000, delai_jours=7)
+    creer(client, h)
+    db.add(TypeVetement(nom="Ancienne prestation", prix_base=1000, delai_jours=1, actif=False))
+    db.commit()
+
+
+def test_lister_catalogue_actifs_tries_par_nom(client, headers, db):
+    _peupler(client, db, headers["admin"])
+    r = client.get(URL, headers=headers["tailleur"])
+    assert r.status_code == 200
+    assert [p["nom"] for p in r.json()] == ["Boubou", "Robe"]
+
+
+def test_lister_catalogue_avec_inactifs(client, headers, db):
+    _peupler(client, db, headers["admin"])
+    r = client.get(URL, params={"actifs_seulement": "false"}, headers=headers["accueil"])
+    assert [p["nom"] for p in r.json()] == ["Ancienne prestation", "Boubou", "Robe"]
+
+
+def test_detail_prestation_et_404(client, headers):
+    pid = creer(client, headers["admin"]).json()["id"]
+    r = client.get(f"{URL}/{pid}", headers=headers["accueil"])
+    assert r.status_code == 200 and r.json()["nom"] == "Boubou"
+    r = client.get(f"{URL}/9999", headers=headers["accueil"])
+    assert r.status_code == 404 and "introuvable" in r.json()["detail"]
