@@ -101,3 +101,27 @@ def test_corriger_mesure_hors_bornes_droits_et_404(client, headers, client_id):
     assert client.patch(f"{API}/mesures/{mid}", json={"tour_taille": 400}, headers=headers["tailleur"]).status_code == 422
     assert client.patch(f"{API}/mesures/{mid}", json={"tour_taille": 81}, headers=headers["accueil"]).status_code == 403
     assert client.patch(f"{API}/mesures/9999", json={"tour_taille": 81}, headers=headers["tailleur"]).status_code == 404
+
+
+def test_supprimer_mesure_204(client, headers, client_id):
+    mid = prendre(client, headers["tailleur"], client_id).json()["id"]
+    r = client.delete(f"{API}/mesures/{mid}", headers=headers["tailleur"])
+    assert r.status_code == 204
+    assert client.get(f"{API}/mesures/{mid}", headers=headers["tailleur"]).status_code == 404
+
+
+def test_rg4_supprimer_mesure_utilisee_par_une_commande_409(client, headers, db, client_id):
+    from tests.factories import commande_en_base
+
+    mid = prendre(client, headers["tailleur"], client_id).json()["id"]
+    commande = commande_en_base(db, client_id)
+    commande.mesure_id = mid
+    db.commit()
+    r = client.delete(f"{API}/mesures/{mid}", headers=headers["tailleur"])
+    assert r.status_code == 409 and "CMD-2026-00001" in r.json()["detail"]
+
+
+def test_supprimer_mesure_droits_et_404(client, headers, client_id):
+    mid = prendre(client, headers["tailleur"], client_id).json()["id"]
+    assert client.delete(f"{API}/mesures/{mid}", headers=headers["accueil"]).status_code == 403
+    assert client.delete(f"{API}/mesures/9999", headers=headers["tailleur"]).status_code == 404

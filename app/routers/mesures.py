@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -46,3 +46,11 @@ def modifier(mesure_id: int, donnees: MesureUpdate, db: Session = Depends(get_db
     db.commit()
     db.refresh(mesure)
     return mesure
+
+
+@router.delete("/mesures/{mesure_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(tailleur)], summary="Supprimer une prise de mesures (tailleur, RG4)")
+def supprimer(mesure_id: int, db: Session = Depends(get_db)):
+    service.supprimer_mesure(db, mesure_id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -3,8 +3,8 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.exceptions import DonneesInvalides, Introuvable
-from app.models import Mesure, Utilisateur
+from app.exceptions import Conflit, DonneesInvalides, Introuvable
+from app.models import Commande, Mesure, Utilisateur
 from app.models.mesure import CHAMPS_MESURES
 from app.schemas.mesure import MESSAGE_AUCUNE_MESURE, MesureCreate, MesureUpdate
 from app.services.clients import obtenir_client
@@ -69,3 +69,16 @@ def modifier_mesure(db: Session, mesure_id: int, donnees: MesureUpdate) -> Mesur
         raise DonneesInvalides(f"Correction refusée : {MESSAGE_AUCUNE_MESURE}.")
     db.flush()
     return mesure
+
+
+def supprimer_mesure(db: Session, mesure_id: int) -> None:
+    """RG4 : une prise utilisée par une commande ne peut pas être supprimée."""
+    mesure = obtenir_mesure(db, mesure_id)
+    numeros = list(db.scalars(select(Commande.numero).where(Commande.mesure_id == mesure.id)))
+    if numeros:
+        raise Conflit(
+            f"Impossible de supprimer cette prise de mesures : elle est utilisée par "
+            f"la/les commande(s) {', '.join(numeros)}."
+        )
+    db.delete(mesure)
+    db.flush()
