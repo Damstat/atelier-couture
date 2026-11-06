@@ -3,7 +3,7 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
-from app.exceptions import Conflit, DonneesInvalides
+from app.exceptions import Conflit, DonneesInvalides, Introuvable
 from app.models import Commande, Paiement, Utilisateur
 from app.models.enums import StatutCommande
 from app.schemas.paiement import PaiementCreate
@@ -46,3 +46,15 @@ def encaisser(db: Session, commande_id: int, donnees: PaiementCreate, auteur: Ut
 def paiements_commande(db: Session, commande_id: int) -> list[Paiement]:
     """Paiements dans l'ordre de saisie."""
     return list(obtenir_commande(db, commande_id).paiements)
+
+
+def annuler_paiement(db: Session, paiement_id: int) -> Commande:
+    """RG17 : supprimer un paiement saisi par erreur recalcule le payé et le solde."""
+    paiement = db.get(Paiement, paiement_id)
+    if paiement is None:
+        raise Introuvable(f"Paiement {paiement_id} introuvable.")
+    commande = paiement.commande
+    commande.paiements.remove(paiement)
+    recalculer_paye(commande)
+    db.flush()
+    return commande

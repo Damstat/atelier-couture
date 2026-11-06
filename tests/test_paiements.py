@@ -77,3 +77,23 @@ def test_lister_paiements_dans_l_ordre_de_saisie(client, headers, commande):
     assert r.status_code == 200
     assert [(p["montant"], p["mode"]) for p in r.json()] == [(10000, "wave"), (5000, "especes")]
     assert client.get(f"{URL}/9999/paiements", headers=headers["tailleur"]).status_code == 404
+
+
+def test_rg17_annuler_un_paiement_recalcule_le_solde(client, headers, commande):
+    p1 = payer(client, headers["accueil"], commande["id"], 20000).json()
+    payer(client, headers["accueil"], commande["id"], 30000)
+    assert detail(client, headers["admin"], commande["id"])["solde"] == 20000
+
+    r = client.delete(f"/api/v1/paiements/{p1['id']}", headers=headers["admin"])
+    assert r.status_code == 204
+    c = detail(client, headers["admin"], commande["id"])
+    assert c["montant_paye"] == 30000 and c["solde"] == 40000
+    assert [p["montant"] for p in c["paiements"]] == [30000]
+
+
+def test_annuler_paiement_admin_seulement_et_404(client, headers, commande):
+    pid = payer(client, headers["accueil"], commande["id"], 1000).json()["id"]
+    assert client.delete(f"/api/v1/paiements/{pid}", headers=headers["accueil"]).status_code == 403
+    assert client.delete(f"/api/v1/paiements/{pid}", headers=headers["tailleur"]).status_code == 403
+    r = client.delete("/api/v1/paiements/9999", headers=headers["admin"])
+    assert r.status_code == 404 and r.json() == {"detail": "Paiement 9999 introuvable."}

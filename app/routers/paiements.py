@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,3 +26,12 @@ def encaisser(commande_id: int, donnees: PaiementCreate, db: Session = Depends(g
             summary="Paiements de la commande, dans l'ordre de saisie")
 def lister(commande_id: int, db: Session = Depends(get_db)):
     return service.paiements_commande(db, commande_id)
+
+
+@router.delete("/paiements/{paiement_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(require_roles())],
+               summary="Annuler un paiement saisi par erreur (admin) ; recalcule le solde (RG17)")
+def annuler(paiement_id: int, db: Session = Depends(get_db)):
+    service.annuler_paiement(db, paiement_id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
