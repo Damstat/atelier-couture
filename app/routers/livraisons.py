@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models import Utilisateur
-from app.models.enums import Role
+from app.models.enums import Role, StatutLivraison
 from app.schemas.commande import CommandeDetail
-from app.schemas.livraison import ConfirmationLivraison, LivraisonPlanification, LivraisonRead
+from app.schemas.livraison import (
+    ConfirmationLivraison, LivraisonPlanification, LivraisonRead, LivraisonTournee,
+)
 from app.services import livraisons as service
 from app.services.commandes import vers_detail
 
@@ -37,3 +41,14 @@ def confirmer(commande_id: int, donnees: ConfirmationLivraison | None = None,
     db.commit()
     db.refresh(commande)
     return vers_detail(commande)
+
+
+@router.get("/livraisons", response_model=list[LivraisonTournee],
+            summary="Liste de tournée, triée par date prévue")
+def lister(
+    statut: StatutLivraison | None = None,
+    date_min: date | None = Query(None, description="Date prévue minimale"),
+    date_max: date | None = Query(None, description="Date prévue maximale"),
+    db: Session = Depends(get_db),
+):
+    return service.tournee(db, statut, date_min, date_max)

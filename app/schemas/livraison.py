@@ -29,6 +29,15 @@ class LivraisonRead(BaseModel):
     notes: str | None
 
 
+class LivraisonTournee(LivraisonRead):
+    """Élément de la liste de tournée."""
+
+    numero_commande: str
+    client_nom: str
+    client_telephone: str
+    solde_commande: int
+
+
 class ConfirmationLivraison(BaseModel):
     date_effective: date | None = Field(default=None, description="Aujourd'hui par défaut")
     autoriser_solde_impaye: bool = Field(

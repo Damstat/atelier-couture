@@ -141,3 +141,25 @@ def test_confirmation_date_future_422_deja_livree_409_droits(client, headers, co
     assert confirmer(client, headers["accueil"], commande["id"]).status_code == 409
     assert planifier(client, headers["accueil"], commande["id"]).status_code == 409  # RG12
     assert confirmer(client, headers["accueil"], 9999).status_code == 404
+
+
+def test_liste_de_tournee_triee_par_date_avec_infos_client(client, headers, donnees):
+    h = headers["accueil"]
+    ids = [creer_commande(client, h, corps_commande(donnees)).json()["id"] for _ in range(3)]
+    jours = [6, 2, 4]
+    for cid, j in zip(ids, jours):
+        planifier(client, h, cid, date_prevue=(date.today() + timedelta(days=j)).isoformat())
+    payer(client, headers, ids[1], 10000)
+
+    r = client.get("/api/v1/livraisons", headers=headers["tailleur"])
+    assert r.status_code == 200
+    l = r.json()
+    assert [x["commande_id"] for x in l] == [ids[1], ids[2], ids[0]]
+    assert l[0]["client_nom"] == "Fatou Diop" and l[0]["client_telephone"] == "771234567"
+    assert l[0]["solde_commande"] == 60000 and l[0]["numero_commande"].startswith("CMD-")
+
+    dans_3j = (date.today() + timedelta(days=3)).isoformat()
+    assert [x["commande_id"] for x in client.get("/api/v1/livraisons", params={"date_min": dans_3j}, headers=h).json()] == [ids[2], ids[0]]
+    assert client.get("/api/v1/livraisons", params={"statut": "livree"}, headers=h).json() == []
+    assert client.get("/api/v1/livraisons", params={"date_min": dans_3j, "date_max": DANS_5J[:8] + "01"}, headers=h).status_code in (200, 422)
+    assert client.get("/api/v1/livraisons", params={"statut": "perdue"}, headers=h).status_code == 422

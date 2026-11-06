@@ -1,12 +1,13 @@
 """Livraisons (RG18 à RG20)."""
 from datetime import date
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.exceptions import Conflit, DonneesInvalides, Introuvable
 from app.models import Commande, Livraison, Utilisateur
 from app.models.enums import ModeLivraison, StatutCommande, StatutLivraison
-from app.schemas.livraison import ConfirmationLivraison, LivraisonPlanification
+from app.schemas.livraison import ConfirmationLivraison, LivraisonPlanification, LivraisonRead
 from app.services.commandes import (
     enregistrer_statut, obtenir_commande, solde, verifier_date_prevue, verifier_modifiable,
 )
@@ -35,6 +36,34 @@ def planifier(db: Session, commande_id: int, donnees: LivraisonPlanification) ->
     commande.date_livraison_prevue = donnees.date_prevue
     db.flush()
     return livraison
+
+
+def tournee(
+    db: Session, statut: StatutLivraison | None = None,
+    date_min: date | None = None, date_max: date | None = None,
+) -> list[dict]:
+    """Liste de tournée triée par date prévue, avec les infos utiles au livreur."""
+    if date_min and date_max and date_min > date_max:
+        raise DonneesInvalides("date_min ne peut pas être postérieure à date_max.")
+    requete = select(Livraison)
+    if statut is not None:
+        requete = requete.where(Livraison.statut == statut)
+    if date_min is not None:
+        requete = requete.where(Livraison.date_prevue >= date_min)
+    if date_max is not None:
+        requete = requete.where(Livraison.date_prevue <= date_max)
+    requete = requete.order_by(Livraison.date_prevue, Livraison.id)
+    resultat = []
+    for l in db.scalars(requete):
+        c = l.commande
+        resultat.append({
+            **LivraisonRead.model_validate(l).model_dump(),
+            "numero_commande": c.numero,
+            "client_nom": f"{c.client.prenom} {c.client.nom}",
+            "client_telephone": c.client.telephone,
+            "solde_commande": solde(c),
+        })
+    return resultat
 
 
 def obtenir_livraison(db: Session, commande_id: int) -> Livraison:
