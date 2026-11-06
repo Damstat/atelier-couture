@@ -41,3 +41,21 @@ def test_message_des_validateurs_metier_conserve():
     r = _client().post("/exemple", json={"nom": "toto", "age": 3})
     assert r.status_code == 422
     assert r.json()["detail"] == "Champ « nom » : ce nom est interdit"
+
+
+def test_exceptions_metier_converties_en_code_http():
+    from app.exceptions import Conflit, DonneesInvalides, Interdit, Introuvable
+
+    app = FastAPI()
+    installer_gestionnaires(app)
+    erreurs = {"404": Introuvable, "409": Conflit, "422": DonneesInvalides, "403": Interdit}
+
+    @app.get("/erreur/{code}")
+    def lever(code: str):
+        raise erreurs[code]("message de test")
+
+    c = TestClient(app)
+    for code in erreurs:
+        r = c.get(f"/erreur/{code}")
+        assert r.status_code == int(code)
+        assert r.json() == {"detail": "message de test"}

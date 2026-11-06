@@ -3,6 +3,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.exceptions import ErreurMetier
+
 _MESSAGES = {
     "missing": "champ obligatoire manquant",
     "string_too_short": "doit contenir au moins {min_length} caractère(s)",
@@ -60,5 +62,10 @@ async def _erreur_validation(_request: Request, exc: RequestValidationError) -> 
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": detail})
 
 
+async def _erreur_metier(_request: Request, exc: ErreurMetier) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+
 def installer_gestionnaires(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _erreur_validation)
+    app.add_exception_handler(ErreurMetier, _erreur_metier)
