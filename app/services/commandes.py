@@ -3,12 +3,14 @@ from collections.abc import Iterable
 from datetime import date, timedelta
 from uuid import uuid4
 
+from sqlalchemy import and_, not_, select
 from sqlalchemy.orm import Session
 
 from app.exceptions import Conflit, DonneesInvalides, Introuvable
 from app.models import Client, Commande, HistoriqueStatut, LigneCommande, Mesure, TypeVetement, Utilisateur
 from app.models.enums import StatutCommande
 from app.schemas.commande import CommandeCreate, LigneCreate
+from app.services.pagination import paginer
 
 STATUTS_FINAUX = {StatutCommande.livree, StatutCommande.annulee}
 
@@ -117,6 +119,49 @@ def vers_detail(commande: Commande) -> dict:
         "paiements": list(commande.paiements),
         "livraison": commande.livraison,
     }
+
+
+def condition_en_retard(aujourd_hui: date | None = None):
+    """RG11 en SQL : date prévue dépassée, ni livrée ni annulée."""
+    aujourd_hui = aujourd_hui or date.today()
+    return and_(
+        Commande.date_livraison_prevue < aujourd_hui,
+        Commande.statut.not_in(list(STATUTS_FINAUX)),
+    )
+
+
+def lister_commandes(
+    db: Session, limit: int, offset: int, *,
+    statut: StatutCommande | None = None, client_id: int | None = None,
+    en_retard: bool | None = None, date_min: date | None = None,
+    date_max: date | None = None, numero: str | None = None,
+) -> tuple[list[Commande], int]:
+    """Commandes filtrées, la plus récente d'abord. date_min et date_max portent sur la date de commande."""
+    if date_min and date_max and date_min > date_max:
+        raise DonneesInvalides("date_min ne peut pas être postérieure à date_max.")
+    requete = select(Commande)
+    if statut is not None:
+        requete = requete.where(Commande.statut == statut)
+    if client_id is not None:
+        requete = requete.where(Commande.client_id == client_id)
+    if en_retard is not None:
+        cond = condition_en_retard()
+        requete = requete.where(cond if en_retard else not_(cond))
+    if date_min is not None:
+        requete = requete.where(Commande.date_commande >= date_min)
+    if date_max is not None:
+        requete = requete.where(Commande.date_commande <= date_max)
+    if numero:
+        requete = requete.where(Commande.numero.ilike(f"%{numero.strip()}%"))
+    requete = requete.order_by(Commande.date_commande.desc(), Commande.id.desc())
+    return paginer(db, requete, limit, offset)
+
+
+def obtenir_commande(db: Session, commande_id: int) -> Commande:
+    commande = db.get(Commande, commande_id)
+    if commande is None:
+        raise Introuvable(f"Commande {commande_id} introuvable.")
+    return commande
 
 
 # ---------- Création ----------

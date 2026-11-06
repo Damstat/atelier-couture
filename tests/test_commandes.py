@@ -141,3 +141,55 @@ def test_creer_commande_droits(client, headers, donnees):
     assert creer(client, headers["tailleur"], corps_commande(donnees)).status_code == 403
     assert creer(client, headers["admin"], corps_commande(donnees)).status_code == 201
     assert client.post(URL, json=corps_commande(donnees)).status_code == 401
+
+
+@pytest.fixture()
+def plusieurs(db, donnees):
+    """4 commandes variées, créées directement en base."""
+    from app.models.enums import StatutCommande as S
+    from tests.factories import commande_en_base
+
+    il_y_a_30j = date.today() - timedelta(days=30)
+    commande_en_base(db, donnees["fatou"], "CMD-2026-00001", S.en_couture, date_commande=il_y_a_30j)  # en retard
+    commande_en_base(db, donnees["fatou"], "CMD-2026-00002", S.livree, date_commande=il_y_a_30j)
+    commande_en_base(db, donnees["awa"], "CMD-2026-00003", S.en_attente)
+    commande_en_base(db, donnees["fatou"], "CMD-2026-00004", S.annulee, montant_total=5000, montant_paye=1000)
+
+
+def numeros(r):
+    return [c["numero"] for c in r.json()["items"]]
+
+
+def test_lister_commandes_plus_recente_d_abord_avec_client_nom_solde_retard(client, headers, plusieurs):
+    r = client.get(URL, headers=headers["tailleur"])
+    assert r.status_code == 200 and r.json()["total"] == 4
+    assert numeros(r) == ["CMD-2026-00004", "CMD-2026-00003", "CMD-2026-00002", "CMD-2026-00001"]
+    premiere = r.json()["items"][0]
+    assert premiere["client_nom"] == "Fatou Diop" and premiere["solde"] == 4000
+    assert {c["numero"]: c["en_retard"] for c in r.json()["items"]}["CMD-2026-00001"] is True
+
+
+@pytest.mark.parametrize("params, attendus", [
+    ({"statut": "livree"}, ["CMD-2026-00002"]),
+    ({"en_retard": "true"}, ["CMD-2026-00001"]),
+    ({"en_retard": "false"}, ["CMD-2026-00004", "CMD-2026-00003", "CMD-2026-00002"]),
+    ({"numero": "00003"}, ["CMD-2026-00003"]),
+    ({"date_max": (date.today() - timedelta(days=1)).isoformat()}, ["CMD-2026-00002", "CMD-2026-00001"]),
+    ({"date_min": date.today().isoformat()}, ["CMD-2026-00004", "CMD-2026-00003"]),
+])
+def test_filtres_des_commandes(client, headers, plusieurs, params, attendus):
+    assert numeros(client.get(URL, params=params, headers=headers["accueil"])) == attendus
+
+
+def test_filtre_client_et_pagination(client, headers, plusieurs, donnees):
+    r = client.get(URL, params={"client_id": donnees["awa"]}, headers=headers["accueil"])
+    assert numeros(r) == ["CMD-2026-00003"]
+    r = client.get(URL, params={"limit": 2, "offset": 2}, headers=headers["accueil"])
+    assert r.json()["total"] == 4 and numeros(r) == ["CMD-2026-00002", "CMD-2026-00001"]
+
+
+def test_filtres_invalides_422(client, headers, plusieurs):
+    h = headers["accueil"]
+    assert client.get(URL, params={"statut": "perdue"}, headers=h).status_code == 422
+    r = client.get(URL, params={"date_min": "2026-05-01", "date_max": "2026-04-01"}, headers=h)
+    assert r.status_code == 422 and "date_min" in r.json()["detail"]

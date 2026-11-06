@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, status
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_roles
+from app.dependencies import Pagination, get_current_user, require_roles
 from app.models import Utilisateur
-from app.models.enums import Role
-from app.schemas.commande import CommandeCreate, CommandeDetail
+from app.models.enums import Role, StatutCommande
+from app.schemas.commande import CommandeCreate, CommandeDetail, CommandeResume
+from app.schemas.common import Page
 from app.services import commandes as service
 
 router = APIRouter(prefix="/commandes", tags=["Commandes"], dependencies=[Depends(get_current_user)])
@@ -19,3 +22,24 @@ def creer(donnees: CommandeCreate, db: Session = Depends(get_db), auteur: Utilis
     db.commit()
     db.refresh(commande)
     return service.vers_detail(commande)
+
+
+@router.get("", response_model=Page[CommandeResume], summary="Liste paginée, la plus récente d'abord")
+def lister(
+    statut: StatutCommande | None = None,
+    client_id: int | None = None,
+    en_retard: bool | None = Query(None, description="Date prévue dépassée, ni livrée ni annulée (RG11)"),
+    date_min: date | None = Query(None, description="Date de commande minimale"),
+    date_max: date | None = Query(None, description="Date de commande maximale"),
+    numero: str | None = Query(None, description="Tout ou partie du numéro"),
+    pagination: Pagination = Depends(),
+    db: Session = Depends(get_db),
+):
+    items, total = service.lister_commandes(
+        db, pagination.limit, pagination.offset, statut=statut, client_id=client_id,
+        en_retard=en_retard, date_min=date_min, date_max=date_max, numero=numero,
+    )
+    return Page[CommandeResume](
+        items=[service.vers_resume(c) for c in items], total=total,
+        limit=pagination.limit, offset=pagination.offset,
+    )
