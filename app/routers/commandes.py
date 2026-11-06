@@ -43,3 +43,9 @@ def lister(
         items=[service.vers_resume(c) for c in items], total=total,
         limit=pagination.limit, offset=pagination.offset,
     )
+
+
+@router.get("/{commande_id}", response_model=CommandeDetail,
+            summary="Détail : lignes, paiements, livraison, solde, retard")
+def detail(commande_id: int, db: Session = Depends(get_db)):
+    return service.vers_detail(service.obtenir_commande(db, commande_id))

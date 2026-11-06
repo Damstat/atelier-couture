@@ -193,3 +193,26 @@ def test_filtres_invalides_422(client, headers, plusieurs):
     assert client.get(URL, params={"statut": "perdue"}, headers=h).status_code == 422
     r = client.get(URL, params={"date_min": "2026-05-01", "date_max": "2026-04-01"}, headers=h)
     assert r.status_code == 422 and "date_min" in r.json()["detail"]
+
+
+def test_detail_commande_avec_lignes_paiements_livraison(client, headers, donnees, db):
+    from app.models import Livraison, Paiement
+    from app.models.enums import ModeLivraison, ModePaiement
+
+    cid = creer(client, headers["accueil"], corps_commande(donnees)).json()["id"]
+    db.add(Paiement(commande_id=cid, montant=10000, mode=ModePaiement.wave))
+    db.add(Livraison(commande_id=cid, mode=ModeLivraison.domicile, adresse="Médina", date_prevue=date.today()))
+    db.commit()
+
+    r = client.get(f"{URL}/{cid}", headers=headers["tailleur"])
+    assert r.status_code == 200
+    c = r.json()
+    assert len(c["lignes"]) == 2 and c["lignes"][0]["type_vetement_nom"] == "Boubou"
+    assert [p["mode"] for p in c["paiements"]] == ["wave"]
+    assert c["livraison"]["adresse"] == "Médina"
+    assert "solde" in c and "en_retard" in c
+
+
+def test_detail_commande_404(client, headers):
+    r = client.get(f"{URL}/9999", headers=headers["tailleur"])
+    assert r.status_code == 404 and r.json() == {"detail": "Commande 9999 introuvable."}
