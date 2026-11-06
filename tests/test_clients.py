@@ -79,3 +79,41 @@ def test_lister_clients_parametres_invalides_422(client, headers):
     assert r.status_code == 422 and "2 caractères" in r.json()["detail"]
     assert client.get(URL, params={"limit": 101}, headers=h).status_code == 422
     assert client.get(URL, params={"offset": -1}, headers=h).status_code == 422
+
+
+def test_detail_client_et_404(client, headers):
+    cid = creer(client, headers["accueil"]).json()["id"]
+    r = client.get(f"{URL}/{cid}", headers=headers["tailleur"])
+    assert r.status_code == 200 and r.json()["prenom"] == "Fatou"
+    r = client.get(f"{URL}/9999", headers=headers["tailleur"])
+    assert r.status_code == 404 and r.json() == {"detail": "Client 9999 introuvable."}
+
+
+def test_modifier_client_partiel(client, headers):
+    cid = creer(client, headers["accueil"], adresse="Médina").json()["id"]
+    r = client.patch(f"{URL}/{cid}", json={"adresse": "Parcelles Assainies"}, headers=headers["accueil"])
+    assert r.status_code == 200
+    assert r.json()["adresse"] == "Parcelles Assainies"
+    assert r.json()["nom"] == "Diop" and r.json()["telephone"] == "771234567"
+
+
+def test_modifier_client_garder_son_numero_n_est_pas_un_doublon(client, headers):
+    cid = creer(client, headers["accueil"]).json()["id"]
+    r = client.patch(f"{URL}/{cid}", json={"telephone": "77.123.45.67"}, headers=headers["accueil"])
+    assert r.status_code == 200 and r.json()["telephone"] == "771234567"
+
+
+def test_modifier_client_numero_d_un_autre_409(client, headers):
+    creer(client, headers["accueil"])
+    cid = creer(client, headers["accueil"], prenom="Awa", telephone="781112233").json()["id"]
+    r = client.patch(f"{URL}/{cid}", json={"telephone": "77 123 45 67"}, headers=headers["accueil"])
+    assert r.status_code == 409
+
+
+def test_modifier_client_ne_peut_pas_vider_nom_prenom_telephone_422(client, headers):
+    cid = creer(client, headers["accueil"]).json()["id"]
+    h = headers["accueil"]
+    for corps in ({"nom": None}, {"prenom": ""}, {"telephone": None}, {"telephone": "  "}):
+        r = client.patch(f"{URL}/{cid}", json=corps, headers=h)
+        assert r.status_code == 422, corps
+    assert client.patch(f"{URL}/9999", json={"notes": "x"}, headers=h).status_code == 404

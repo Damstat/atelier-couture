@@ -32,6 +32,28 @@ class ClientCreate(BaseModel):
     _tel = field_validator("telephone")(_telephone)
 
 
+class ClientUpdate(BaseModel):
+    """PATCH : seuls les champs envoyés sont modifiés ; nom, prénom et téléphone ne peuvent pas être vidés."""
+
+    nom: str | None = Field(default=None, min_length=1, max_length=100)
+    prenom: str | None = Field(default=None, min_length=1, max_length=100)
+    telephone: str | None = Field(default=None, max_length=40)
+    email: EmailStr | None = None
+    adresse: str | None = Field(default=None, max_length=255)
+    genre: Genre | None = None
+    notes: str | None = None
+
+    _textes = field_validator("nom", "prenom")(_texte_obligatoire)
+    _tel = field_validator("telephone")(_telephone)
+
+    @model_validator(mode="after")
+    def obligatoires_non_vides(self):
+        vides = [c for c in ("nom", "prenom", "telephone") if c in self.model_fields_set and getattr(self, c) is None]
+        if vides:
+            raise ValueError(f"ces champs ne peuvent pas être vidés : {', '.join(vides)}")
+        return self
+
+
 class ClientRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

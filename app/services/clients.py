@@ -3,11 +3,11 @@ import re
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.exceptions import Conflit, DonneesInvalides
+from app.exceptions import Conflit, DonneesInvalides, Introuvable
 from app.models import Client
 from app.models.enums import Genre
 from app.services.pagination import paginer
-from app.schemas.client import ClientCreate
+from app.schemas.client import ClientCreate, ClientUpdate
 
 
 def _verifier_telephone_libre(db: Session, telephone: str, sauf_id: int | None = None) -> None:
@@ -50,3 +50,22 @@ def lister_clients(
         requete = requete.where(Client.genre == genre)
     requete = requete.order_by(Client.nom, Client.prenom, Client.id)
     return paginer(db, requete, limit, offset)
+
+
+def obtenir_client(db: Session, client_id: int) -> Client:
+    client = db.get(Client, client_id)
+    if client is None:
+        raise Introuvable(f"Client {client_id} introuvable.")
+    return client
+
+
+def modifier_client(db: Session, client_id: int, donnees: ClientUpdate) -> Client:
+    client = obtenir_client(db, client_id)
+    champs = donnees.model_dump(exclude_unset=True)
+    if "telephone" in champs:
+        # Garder son propre numéro n'est pas un doublon
+        _verifier_telephone_libre(db, champs["telephone"], sauf_id=client.id)
+    for champ, valeur in champs.items():
+        setattr(client, champ, valeur)
+    db.flush()
+    return client

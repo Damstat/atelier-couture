@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import Pagination, get_current_user
 from app.models.enums import Genre
-from app.schemas.client import ClientCreate, ClientRead
+from app.schemas.client import ClientCreate, ClientRead, ClientUpdate
 from app.schemas.common import Page
 from app.services import clients as service
 
@@ -30,3 +30,16 @@ def lister(
 ):
     items, total = service.lister_clients(db, pagination.limit, pagination.offset, q, genre)
     return Page[ClientRead](items=items, total=total, limit=pagination.limit, offset=pagination.offset)
+
+
+@router.get("/{client_id}", response_model=ClientRead, summary="Fiche d'un client")
+def detail(client_id: int, db: Session = Depends(get_db)):
+    return service.obtenir_client(db, client_id)
+
+
+@router.patch("/{client_id}", response_model=ClientRead, summary="Modification partielle d'un client")
+def modifier(client_id: int, donnees: ClientUpdate, db: Session = Depends(get_db)):
+    client = service.modifier_client(db, client_id, donnees)
+    db.commit()
+    db.refresh(client)
+    return client
