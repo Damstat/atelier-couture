@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_roles
-from app.schemas.catalogue import TypeVetementCreate, TypeVetementRead
+from app.schemas.catalogue import TypeVetementCreate, TypeVetementRead, TypeVetementUpdate
 from app.services import catalogue as service
 
 router = APIRouter(prefix="/catalogue", tags=["Catalogue"], dependencies=[Depends(get_current_user)])
@@ -27,3 +27,13 @@ def lister(actifs_seulement: bool = True, db: Session = Depends(get_db)):
 @router.get("/{prestation_id}", response_model=TypeVetementRead, summary="Détail d'une prestation")
 def detail(prestation_id: int, db: Session = Depends(get_db)):
     return service.obtenir_prestation(db, prestation_id)
+
+
+@router.patch("/{prestation_id}", response_model=TypeVetementRead,
+              dependencies=[Depends(require_roles())],
+              summary="Modifier prix, délai, nom ; actif=false retire la prestation (admin)")
+def modifier(prestation_id: int, donnees: TypeVetementUpdate, db: Session = Depends(get_db)):
+    prestation = service.modifier_prestation(db, prestation_id, donnees)
+    db.commit()
+    db.refresh(prestation)
+    return prestation
