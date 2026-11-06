@@ -39,3 +39,22 @@ def test_login_champs_manquants_422(client):
     r = client.post(URL, data={})
     assert r.status_code == 422
     assert isinstance(r.json()["detail"], str)
+
+
+def test_me_renvoie_le_profil_sans_donnee_sensible(client, headers):
+    r = client.get("/api/v1/auth/me", headers=headers["tailleur"])
+    assert r.status_code == 200
+    corps = r.json()
+    assert corps["email"] == "tailleur@atelier.sn"
+    assert corps["role"] == "tailleur"
+    assert "mot_de_passe_hash" not in corps and "mot_de_passe" not in corps
+
+
+def test_me_sans_jeton_401(client):
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_parcours_login_puis_me(client, utilisateurs):
+    jeton = _login(client, "admin@atelier.sn", MOT_DE_PASSE).json()["access_token"]
+    r = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {jeton}"})
+    assert r.json()["role"] == "admin"
