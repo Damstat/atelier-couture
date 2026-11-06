@@ -177,3 +177,58 @@ def test_detail_commande_avec_lignes_paiements_livraison(client, headers, donnee
 def test_detail_commande_404(client, headers):
     r = client.get(f"{URL}/9999", headers=headers["tailleur"])
     assert r.status_code == 404 and r.json() == {"detail": "Commande 9999 introuvable."}
+
+
+@pytest.fixture()
+def commande(client, headers, donnees):
+    return creer(client, headers["accueil"], corps_commande(donnees)).json()
+
+
+def patch(client, h, cid, **corps):
+    return client.patch(f"{URL}/{cid}", json=corps, headers=h)
+
+
+def test_modifier_remise_recalcule_le_total(client, headers, commande):
+    r = patch(client, headers["accueil"], commande["id"], remise=12000)
+    assert r.status_code == 200
+    assert r.json()["montant_total"] == 60000 and r.json()["solde"] == 60000
+
+
+def test_modifier_date_notes_et_mesure(client, headers, commande, donnees):
+    prevue = (date.today() + timedelta(days=20)).isoformat()
+    r = patch(client, headers["accueil"], commande["id"], date_livraison_prevue=prevue, notes="urgent",
+              mesure_id=donnees["mesure_ancienne"])
+    assert r.status_code == 200
+    c = r.json()
+    assert c["date_livraison_prevue"] == prevue and c["notes"] == "urgent"
+    assert c["mesure_id"] == donnees["mesure_ancienne"]
+    assert c["remise"] == 2000  # inchangé
+
+
+def test_modifier_commande_regles_422(client, headers, commande, donnees):
+    h, cid = headers["accueil"], commande["id"]
+    assert patch(client, h, cid, remise=72001).status_code == 422                       # RG7
+    hier = (date.today() - timedelta(days=1)).isoformat()
+    assert patch(client, h, cid, date_livraison_prevue=hier).status_code == 422          # RG8
+    assert patch(client, h, cid, mesure_id=donnees["mesure_awa"]).status_code == 422     # RG9
+    assert patch(client, h, cid, remise=None).status_code == 422
+
+
+def test_rg7_remise_ne_peut_pas_ramener_le_total_sous_le_paye_409(client, headers, commande, db):
+    from app.models import Commande
+
+    db.get(Commande, commande["id"]).montant_paye = 65000
+    db.commit()
+    r = patch(client, headers["accueil"], commande["id"], remise=10000)
+    assert r.status_code == 409 and "déjà payé" in r.json()["detail"]
+
+
+def test_rg12_commande_annulee_non_modifiable_409(client, headers, commande):
+    client.post(f"{URL}/{commande['id']}/statut", json={"statut": "annulee"}, headers=headers["accueil"])
+    r = patch(client, headers["accueil"], commande["id"], notes="x")
+    assert r.status_code == 409 and "plus modifiable" in r.json()["detail"]
+
+
+def test_modifier_commande_droits_et_404(client, headers, commande):
+    assert patch(client, headers["tailleur"], commande["id"], notes="x").status_code == 403
+    assert patch(client, headers["accueil"], 9999, notes="x").status_code == 404

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import StatutCommande
 from app.schemas.livraison import LivraisonRead
@@ -25,6 +25,23 @@ class CommandeCreate(BaseModel):
         default=None, description="Date du jour + plus long délai des prestations par défaut (RG8)"
     )
     notes: str | None = None
+
+
+class CommandeUpdate(BaseModel):
+    """PATCH : seuls les champs envoyés sont modifiés ; les montants sont recalculés."""
+
+    mesure_id: int | None = None
+    date_livraison_prevue: date | None = None
+    remise: int | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def pas_de_null(self):
+        nuls = [c for c in ("date_livraison_prevue", "remise")
+                if c in self.model_fields_set and getattr(self, c) is None]
+        if nuls:
+            raise ValueError(f"ces champs ne peuvent pas être vides : {', '.join(nuls)}")
+        return self
 
 
 class ChangementStatut(BaseModel):

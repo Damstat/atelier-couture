@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.exceptions import Conflit, DonneesInvalides, Interdit, Introuvable
 from app.models import Client, Commande, HistoriqueStatut, LigneCommande, Mesure, TypeVetement, Utilisateur
 from app.models.enums import Role, StatutCommande
-from app.schemas.commande import ChangementStatut, CommandeCreate, LigneCreate
+from app.schemas.commande import ChangementStatut, CommandeCreate, CommandeUpdate, LigneCreate
 from app.services.pagination import paginer
 from app.services.workflow import verifier_transition
 
@@ -290,3 +290,33 @@ def historique_commande(db: Session, commande_id: int) -> list[dict]:
         }
         for h in commande.historique  # relation triée par id = ordre d'insertion
     ]
+
+
+# ---------- Modification ----------
+
+def verifier_modifiable(commande: Commande) -> None:
+    """RG12 : une commande livrée ou annulée n'est plus modifiable."""
+    if commande.statut in STATUTS_FINAUX:
+        raise Conflit(
+            f"La commande {commande.numero} est « {commande.statut.value} » : elle n'est plus modifiable."
+        )
+
+
+def modifier_commande(db: Session, commande_id: int, donnees: CommandeUpdate) -> Commande:
+    commande = obtenir_commande(db, commande_id)
+    verifier_modifiable(commande)
+    champs = donnees.model_dump(exclude_unset=True)
+
+    if "mesure_id" in champs:
+        mesure = choisir_mesure(db, commande.client, champs["mesure_id"]) if champs["mesure_id"] else None
+        commande.mesure_id = mesure.id if mesure else None
+    if "date_livraison_prevue" in champs:
+        verifier_date_prevue(champs["date_livraison_prevue"], commande.date_commande)
+        commande.date_livraison_prevue = champs["date_livraison_prevue"]
+    if "remise" in champs:
+        commande.remise = champs["remise"]
+        recalculer_montants(commande)  # RG7
+    if "notes" in champs:
+        commande.notes = champs["notes"]
+    db.flush()
+    return commande

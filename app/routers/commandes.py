@@ -8,7 +8,7 @@ from app.dependencies import Pagination, get_current_user, require_roles
 from app.models import Utilisateur
 from app.models.enums import Role, StatutCommande
 from app.schemas.commande import (
-    ChangementStatut, CommandeCreate, CommandeDetail, CommandeResume, HistoriqueRead,
+    ChangementStatut, CommandeCreate, CommandeDetail, CommandeResume, CommandeUpdate, HistoriqueRead,
 )
 from app.schemas.common import Page
 from app.services import commandes as service
@@ -67,3 +67,12 @@ def changer_statut(commande_id: int, donnees: ChangementStatut, db: Session = De
             summary="Changements de statut, dans l'ordre chronologique (RG15)")
 def historique(commande_id: int, db: Session = Depends(get_db)):
     return service.historique_commande(db, commande_id)
+
+
+@router.patch("/{commande_id}", response_model=CommandeDetail, dependencies=[Depends(accueil)],
+              summary="Modifier mesure, date prévue, remise, notes (accueil) ; montants recalculés")
+def modifier(commande_id: int, donnees: CommandeUpdate, db: Session = Depends(get_db)):
+    commande = service.modifier_commande(db, commande_id, donnees)
+    db.commit()
+    db.refresh(commande)
+    return service.vers_detail(commande)
