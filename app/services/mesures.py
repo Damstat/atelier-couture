@@ -3,9 +3,10 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.exceptions import Introuvable
+from app.exceptions import DonneesInvalides, Introuvable
 from app.models import Mesure, Utilisateur
-from app.schemas.mesure import MesureCreate
+from app.models.mesure import CHAMPS_MESURES
+from app.schemas.mesure import MESSAGE_AUCUNE_MESURE, MesureCreate, MesureUpdate
 from app.services.clients import obtenir_client
 
 
@@ -55,4 +56,16 @@ def obtenir_mesure(db: Session, mesure_id: int) -> Mesure:
     mesure = db.get(Mesure, mesure_id)
     if mesure is None:
         raise Introuvable(f"Prise de mesures {mesure_id} introuvable.")
+    return mesure
+
+
+def modifier_mesure(db: Session, mesure_id: int, donnees: MesureUpdate) -> Mesure:
+    """Corrige une erreur de saisie ; la prise doit garder au moins une mesure (RG2)."""
+    mesure = obtenir_mesure(db, mesure_id)
+    champs = donnees.model_dump(exclude_unset=True)
+    for champ, valeur in champs.items():
+        setattr(mesure, champ, valeur)
+    if all(getattr(mesure, c) is None for c in CHAMPS_MESURES):
+        raise DonneesInvalides(f"Correction refusée : {MESSAGE_AUCUNE_MESURE}.")
+    db.flush()
     return mesure

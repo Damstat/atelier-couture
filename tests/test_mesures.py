@@ -79,3 +79,25 @@ def test_detail_mesure_et_404(client, headers, client_id):
     r = client.get(f"{API}/mesures/{mid}", headers=headers["accueil"])
     assert r.status_code == 200 and r.json()["id"] == mid
     assert client.get(f"{API}/mesures/9999", headers=headers["accueil"]).status_code == 404
+
+
+def test_corriger_une_mesure(client, headers, client_id):
+    mid = prendre(client, headers["tailleur"], client_id, tour_taille=80, tour_cou=38).json()["id"]
+    r = client.patch(f"{API}/mesures/{mid}", json={"tour_taille": 81, "tour_cou": None}, headers=headers["tailleur"])
+    assert r.status_code == 200
+    assert r.json()["tour_taille"] == 81 and r.json()["tour_cou"] is None
+
+
+def test_correction_qui_supprime_toutes_les_mesures_422(client, headers, client_id):
+    mid = prendre(client, headers["tailleur"], client_id, tour_taille=80).json()["id"]
+    r = client.patch(f"{API}/mesures/{mid}", json={"tour_taille": None}, headers=headers["tailleur"])
+    assert r.status_code == 422 and "au moins une mesure" in r.json()["detail"]
+    # La mesure n'a pas été modifiée
+    assert client.get(f"{API}/mesures/{mid}", headers=headers["tailleur"]).json()["tour_taille"] == 80
+
+
+def test_corriger_mesure_hors_bornes_droits_et_404(client, headers, client_id):
+    mid = prendre(client, headers["tailleur"], client_id).json()["id"]
+    assert client.patch(f"{API}/mesures/{mid}", json={"tour_taille": 400}, headers=headers["tailleur"]).status_code == 422
+    assert client.patch(f"{API}/mesures/{mid}", json={"tour_taille": 81}, headers=headers["accueil"]).status_code == 403
+    assert client.patch(f"{API}/mesures/9999", json={"tour_taille": 81}, headers=headers["tailleur"]).status_code == 404

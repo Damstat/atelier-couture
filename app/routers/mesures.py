@@ -5,7 +5,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models import Utilisateur
 from app.models.enums import Role
-from app.schemas.mesure import MesureCreate, MesureRead
+from app.schemas.mesure import MesureCreate, MesureRead, MesureUpdate
 from app.services import mesures as service
 
 router = APIRouter(tags=["Mesures"], dependencies=[Depends(get_current_user)])
@@ -37,3 +37,12 @@ def derniere(client_id: int, db: Session = Depends(get_db)):
 @router.get("/mesures/{mesure_id}", response_model=MesureRead, summary="Une prise de mesures")
 def detail(mesure_id: int, db: Session = Depends(get_db)):
     return service.obtenir_mesure(db, mesure_id)
+
+
+@router.patch("/mesures/{mesure_id}", response_model=MesureRead, dependencies=[Depends(tailleur)],
+              summary="Corriger une prise de mesures (tailleur)")
+def modifier(mesure_id: int, donnees: MesureUpdate, db: Session = Depends(get_db)):
+    mesure = service.modifier_mesure(db, mesure_id, donnees)
+    db.commit()
+    db.refresh(mesure)
+    return mesure
