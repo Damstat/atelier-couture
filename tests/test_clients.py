@@ -149,3 +149,36 @@ def test_supprimer_client_reserve_admin_et_404(client, headers):
     assert client.delete(f"{URL}/{cid}", headers=headers["accueil"]).status_code == 403
     assert client.delete(f"{URL}/{cid}", headers=headers["tailleur"]).status_code == 403
     assert client.delete(f"{URL}/9999", headers=headers["admin"]).status_code == 404
+
+
+def test_commandes_du_client_paginees_plus_recente_d_abord(client, headers, db):
+    from datetime import date, timedelta
+
+    from app.models.enums import StatutCommande
+    from tests.factories import commande_en_base
+
+    cid = creer(client, headers["accueil"]).json()["id"]
+    autre = creer(client, headers["accueil"], prenom="Awa", telephone="781112233").json()["id"]
+    il_y_a_un_mois = date.today() - timedelta(days=30)
+    commande_en_base(db, cid, "CMD-2026-00001", date_commande=il_y_a_un_mois, montant_total=20000, montant_paye=5000)
+    commande_en_base(db, cid, "CMD-2026-00002")
+    commande_en_base(db, autre, "CMD-2026-00003")
+    commande_en_base(db, cid, "CMD-2026-00004", statut=StatutCommande.livree, date_commande=il_y_a_un_mois)
+
+    r = client.get(f"{URL}/{cid}/commandes", headers=headers["tailleur"])
+    assert r.status_code == 200
+    corps = r.json()
+    assert corps["total"] == 3
+    assert [c["numero"] for c in corps["items"]] == ["CMD-2026-00002", "CMD-2026-00004", "CMD-2026-00001"]
+    ancienne = corps["items"][2]
+    assert ancienne["client_nom"] == "Fatou Diop"
+    assert ancienne["solde"] == 15000
+    assert ancienne["en_retard"] is True           # RG11 : date prévue dépassée
+    assert corps["items"][1]["en_retard"] is False  # livrée : jamais en retard
+
+    page = client.get(f"{URL}/{cid}/commandes", params={"limit": 1, "offset": 1}, headers=headers["tailleur"]).json()
+    assert page["total"] == 3 and [c["numero"] for c in page["items"]] == ["CMD-2026-00004"]
+
+
+def test_commandes_client_inconnu_404(client, headers):
+    assert client.get(f"{URL}/9999/commandes", headers=headers["accueil"]).status_code == 404

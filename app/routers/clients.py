@@ -5,8 +5,10 @@ from app.database import get_db
 from app.dependencies import Pagination, get_current_user, require_roles
 from app.models.enums import Genre
 from app.schemas.client import ClientCreate, ClientRead, ClientUpdate
+from app.schemas.commande import CommandeResume
 from app.schemas.common import Page
 from app.services import clients as service
+from app.services.commandes import vers_resume
 
 # Tout utilisateur connecté (sauf indication contraire sur la route)
 router = APIRouter(prefix="/clients", tags=["Clients"], dependencies=[Depends(get_current_user)])
@@ -52,3 +54,13 @@ def supprimer(client_id: int, db: Session = Depends(get_db)):
     service.supprimer_client(db, client_id)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{client_id}/commandes", response_model=Page[CommandeResume],
+            summary="Commandes du client, la plus récente d'abord")
+def commandes(client_id: int, pagination: Pagination = Depends(), db: Session = Depends(get_db)):
+    items, total = service.commandes_du_client(db, client_id, pagination.limit, pagination.offset)
+    return Page[CommandeResume](
+        items=[vers_resume(c) for c in items], total=total,
+        limit=pagination.limit, offset=pagination.offset,
+    )

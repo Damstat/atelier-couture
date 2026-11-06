@@ -82,3 +82,14 @@ def supprimer_client(db: Session, client_id: int) -> None:
         )
     db.delete(client)
     db.flush()
+
+
+def commandes_du_client(db: Session, client_id: int, limit: int, offset: int) -> tuple[list[Commande], int]:
+    """Commandes du client, la plus récente d'abord."""
+    obtenir_client(db, client_id)
+    requete = (
+        select(Commande)
+        .where(Commande.client_id == client_id)
+        .order_by(Commande.date_commande.desc(), Commande.id.desc())
+    )
+    return paginer(db, requete, limit, offset)
