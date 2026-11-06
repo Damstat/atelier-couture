@@ -27,3 +27,10 @@ class LivraisonRead(BaseModel):
     date_effective: date | None
     statut: StatutLivraison
     notes: str | None
+
+
+class ConfirmationLivraison(BaseModel):
+    date_effective: date | None = Field(default=None, description="Aujourd'hui par défaut")
+    autoriser_solde_impaye: bool = Field(
+        default=False, description="Livrer malgré un solde impayé (la dette reste visible, RG19)"
+    )

@@ -59,3 +59,85 @@ def test_planifier_commande_annulee_409(client, headers, commande):
 def test_planifier_droits_et_404(client, headers, commande):
     assert planifier(client, headers["tailleur"], commande["id"]).status_code == 403
     assert planifier(client, headers["accueil"], 9999).status_code == 404
+
+
+def test_detail_livraison_et_404_si_aucune(client, headers, commande):
+    r = client.get(f"{URL}/{commande['id']}/livraison", headers=headers["tailleur"])
+    assert r.status_code == 404 and "Aucune livraison" in r.json()["detail"]
+    planifier(client, headers["accueil"], commande["id"])
+    r = client.get(f"{URL}/{commande['id']}/livraison", headers=headers["tailleur"])
+    assert r.status_code == 200 and r.json()["adresse"] == "Médina, rue 6"
+
+
+def terminer(client, headers, cid):
+    for s in ["en_coupe", "en_couture", "terminee"]:
+        client.post(f"{URL}/{cid}/statut", json={"statut": s}, headers=headers["tailleur"])
+
+
+def payer(client, headers, cid, montant):
+    client.post(f"{URL}/{cid}/paiements", json={"montant": montant, "mode": "wave"}, headers=headers["accueil"])
+
+
+def confirmer(client, h, cid, corps=None):
+    return client.post(f"{URL}/{cid}/livraison/confirmer", json=corps, headers=h)
+
+
+def test_rg19_commande_non_terminee_409(client, headers, commande):
+    payer(client, headers, commande["id"], 70000)
+    r = confirmer(client, headers["accueil"], commande["id"])
+    assert r.status_code == 409 and "terminee" in r.json()["detail"]
+
+
+def test_rg19_solde_impaye_409_avec_le_montant(client, headers, commande):
+    terminer(client, headers, commande["id"])
+    payer(client, headers, commande["id"], 20000)
+    r = confirmer(client, headers["accueil"], commande["id"])
+    assert r.status_code == 409 and "50000 FCFA" in r.json()["detail"]
+
+
+def test_rg20_confirmation_soldee_avec_livraison_planifiee(client, headers, commande):
+    terminer(client, headers, commande["id"])
+    planifier(client, headers["accueil"], commande["id"])
+    payer(client, headers, commande["id"], 70000)
+    r = confirmer(client, headers["accueil"], commande["id"])
+    assert r.status_code == 200
+    c = r.json()
+    assert c["statut"] == "livree" and c["solde"] == 0
+    assert c["date_livraison_reelle"] == date.today().isoformat()
+    assert c["livraison"]["statut"] == "livree" and c["livraison"]["date_effective"] == date.today().isoformat()
+    assert c["livraison"]["mode"] == "domicile"
+    hist = client.get(f"{URL}/{commande['id']}/historique", headers=headers["accueil"]).json()
+    assert hist[-1]["ancien_statut"] == "terminee" and hist[-1]["nouveau_statut"] == "livree"
+
+
+def test_rg20_sans_planification_retrait_atelier_cree(client, headers, commande, db):
+    from app.models import Livraison
+
+    terminer(client, headers, commande["id"])
+    payer(client, headers, commande["id"], 70000)
+    r = confirmer(client, headers["accueil"], commande["id"], {"date_effective": date.today().isoformat()})
+    assert r.status_code == 200
+    assert r.json()["livraison"]["mode"] == "retrait_atelier"
+    assert db.query(Livraison).count() == 1
+
+
+def test_rg19_solde_impaye_autorise_mention_dans_l_historique(client, headers, commande):
+    terminer(client, headers, commande["id"])
+    payer(client, headers, commande["id"], 20000)
+    r = confirmer(client, headers["accueil"], commande["id"], {"autoriser_solde_impaye": True})
+    assert r.status_code == 200
+    assert r.json()["statut"] == "livree" and r.json()["solde"] == 50000  # la dette reste visible
+    hist = client.get(f"{URL}/{commande['id']}/historique", headers=headers["accueil"]).json()
+    assert "50000 FCFA" in hist[-1]["commentaire"]
+
+
+def test_confirmation_date_future_422_deja_livree_409_droits(client, headers, commande):
+    terminer(client, headers, commande["id"])
+    payer(client, headers, commande["id"], 70000)
+    demain = (date.today() + timedelta(days=1)).isoformat()
+    assert confirmer(client, headers["accueil"], commande["id"], {"date_effective": demain}).status_code == 422
+    assert confirmer(client, headers["tailleur"], commande["id"]).status_code == 403
+    assert confirmer(client, headers["accueil"], commande["id"]).status_code == 200
+    assert confirmer(client, headers["accueil"], commande["id"]).status_code == 409
+    assert planifier(client, headers["accueil"], commande["id"]).status_code == 409  # RG12
+    assert confirmer(client, headers["accueil"], 9999).status_code == 404

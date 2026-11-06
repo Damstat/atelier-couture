@@ -1,11 +1,15 @@
 """Livraisons (RG18 à RG20)."""
+from datetime import date
+
 from sqlalchemy.orm import Session
 
-from app.exceptions import DonneesInvalides
-from app.models import Livraison
-from app.models.enums import ModeLivraison, StatutLivraison
-from app.schemas.livraison import LivraisonPlanification
-from app.services.commandes import obtenir_commande, verifier_date_prevue, verifier_modifiable
+from app.exceptions import Conflit, DonneesInvalides, Introuvable
+from app.models import Commande, Livraison, Utilisateur
+from app.models.enums import ModeLivraison, StatutCommande, StatutLivraison
+from app.schemas.livraison import ConfirmationLivraison, LivraisonPlanification
+from app.services.commandes import (
+    enregistrer_statut, obtenir_commande, solde, verifier_date_prevue, verifier_modifiable,
+)
 
 
 def planifier(db: Session, commande_id: int, donnees: LivraisonPlanification) -> Livraison:
@@ -31,3 +35,50 @@ def planifier(db: Session, commande_id: int, donnees: LivraisonPlanification) ->
     commande.date_livraison_prevue = donnees.date_prevue
     db.flush()
     return livraison
+
+
+def obtenir_livraison(db: Session, commande_id: int) -> Livraison:
+    commande = obtenir_commande(db, commande_id)
+    if commande.livraison is None:
+        raise Introuvable(f"Aucune livraison n'est planifiée pour la commande {commande.numero}.")
+    return commande.livraison
+
+
+def confirmer(db: Session, commande_id: int, donnees: ConfirmationLivraison, auteur: Utilisateur) -> Commande:
+    """Remise du vêtement au client (RG19, RG20)."""
+    commande = obtenir_commande(db, commande_id)
+
+    # RG19 : la commande doit être « terminee »...
+    if commande.statut != StatutCommande.terminee:
+        raise Conflit(
+            f"La commande {commande.numero} est « {commande.statut.value} » : "
+            "seule une commande « terminee » peut être livrée."
+        )
+    date_effective = donnees.date_effective or date.today()
+    if date_effective > date.today():
+        raise DonneesInvalides("La date effective de livraison ne peut pas être dans le futur.")
+    if date_effective < commande.date_commande:
+        raise DonneesInvalides("La date effective de livraison ne peut pas précéder la date de commande.")
+
+    # ... et soldée, sauf autorisation explicite (la dette reste alors visible)
+    impaye = solde(commande)
+    commentaire = None
+    if impaye > 0:
+        if not donnees.autoriser_solde_impaye:
+            raise Conflit(
+                f"Livraison refusée : il reste {impaye} FCFA à payer sur la commande {commande.numero}. "
+                "Encaissez le solde ou envoyez autoriser_solde_impaye=true."
+            )
+        commentaire = f"Livrée avec un solde impayé de {impaye} FCFA (autorisé)."
+
+    # RG20 : sans planification préalable, une livraison « retrait_atelier » est créée
+    livraison = commande.livraison or Livraison(
+        mode=ModeLivraison.retrait_atelier, date_prevue=commande.date_livraison_prevue,
+    )
+    livraison.statut = StatutLivraison.livree
+    livraison.date_effective = date_effective
+    commande.livraison = livraison
+    commande.date_livraison_reelle = date_effective
+    enregistrer_statut(commande, StatutCommande.livree, auteur, commentaire)  # RG15
+    db.flush()
+    return commande
