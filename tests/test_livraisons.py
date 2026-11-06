@@ -161,5 +161,7 @@ def test_liste_de_tournee_triee_par_date_avec_infos_client(client, headers, donn
     dans_3j = (date.today() + timedelta(days=3)).isoformat()
     assert [x["commande_id"] for x in client.get("/api/v1/livraisons", params={"date_min": dans_3j}, headers=h).json()] == [ids[2], ids[0]]
     assert client.get("/api/v1/livraisons", params={"statut": "livree"}, headers=h).json() == []
-    assert client.get("/api/v1/livraisons", params={"date_min": dans_3j, "date_max": DANS_5J[:8] + "01"}, headers=h).status_code in (200, 422)
+    hier = (date.today() - timedelta(days=1)).isoformat()
+    r = client.get("/api/v1/livraisons", params={"date_min": dans_3j, "date_max": hier}, headers=h)
+    assert r.status_code == 422 and "date_min" in r.json()["detail"]
     assert client.get("/api/v1/livraisons", params={"statut": "perdue"}, headers=h).status_code == 422
