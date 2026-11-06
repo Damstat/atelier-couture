@@ -8,11 +8,11 @@ URL_COMMANDES = "/api/v1/commandes"
 
 
 def commande_en_base(db, client_id, numero="CMD-2026-00001", statut=StatutCommande.en_attente,
-                     montant_total=10000, montant_paye=0, date_commande=None):
+                     montant_total=10000, montant_paye=0, date_commande=None, date_prevue=None):
     d = date_commande or date.today()
     c = Commande(
         numero=numero, client_id=client_id, statut=statut, date_commande=d,
-        date_livraison_prevue=d + timedelta(days=7), remise=0,
+        date_livraison_prevue=date_prevue or d + timedelta(days=7), remise=0,
         montant_total=montant_total, montant_paye=montant_paye,
     )
     db.add(c)

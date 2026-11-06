@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 
 from app.errors import installer_gestionnaires
-from app.routers import auth, catalogue, clients, commandes, livraisons, mesures, paiements, utilisateurs
+from app.routers import (
+    auth, catalogue, clients, commandes, livraisons, mesures, paiements, statistiques, utilisateurs,
+)
 
 API_PREFIX = "/api/v1"
 
@@ -16,6 +18,7 @@ app.include_router(mesures.router, prefix=API_PREFIX)
 app.include_router(commandes.router, prefix=API_PREFIX)
 app.include_router(paiements.router, prefix=API_PREFIX)
 app.include_router(livraisons.router, prefix=API_PREFIX)
+app.include_router(statistiques.router, prefix=API_PREFIX)
 
 
 @app.get("/health")
