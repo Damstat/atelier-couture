@@ -2,48 +2,10 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.models import Client, Mesure, TypeVetement
+from app.models import Client
+from tests.factories import URL_COMMANDES as URL
+from tests.factories import corps_commande, creer_commande as creer
 
-API = "/api/v1"
-URL = f"{API}/commandes"
-
-
-@pytest.fixture()
-def donnees(db):
-    """Une cliente avec deux prises de mesures, et un petit catalogue."""
-    fatou = Client(nom="Diop", prenom="Fatou", telephone="771234567")
-    awa = Client(nom="Ba", prenom="Awa", telephone="781112233")
-    boubou = TypeVetement(nom="Boubou", prix_base=35000, delai_jours=10)
-    pantalon = TypeVetement(nom="Pantalon", prix_base=12000, delai_jours=4)
-    retiree = TypeVetement(nom="Ancienne", prix_base=1000, delai_jours=1, actif=False)
-    db.add_all([fatou, awa, boubou, pantalon, retiree])
-    db.flush()
-    ancienne = Mesure(client_id=fatou.id, date_prise=date.today() - timedelta(days=60), tour_taille=80)
-    recente = Mesure(client_id=fatou.id, date_prise=date.today() - timedelta(days=2), tour_taille=82)
-    mesure_awa = Mesure(client_id=awa.id, tour_taille=70)
-    db.add_all([ancienne, recente, mesure_awa])
-    db.commit()
-    return {
-        "fatou": fatou.id, "awa": awa.id, "boubou": boubou.id, "pantalon": pantalon.id,
-        "retiree": retiree.id, "mesure_ancienne": ancienne.id, "mesure_recente": recente.id,
-        "mesure_awa": mesure_awa.id,
-    }
-
-
-def corps_commande(d, **autres):
-    return {
-        "client_id": d["fatou"],
-        "lignes": [
-            {"type_vetement_id": d["boubou"], "quantite": 2, "prix_unitaire": 30000},
-            {"type_vetement_id": d["pantalon"]},
-        ],
-        "remise": 2000,
-        **autres,
-    }
-
-
-def creer(client, h, corps):
-    return client.post(URL, json=corps, headers=h)
 
 
 def test_creer_commande_201_tout_est_calcule_par_le_serveur(client, headers, donnees, utilisateurs):

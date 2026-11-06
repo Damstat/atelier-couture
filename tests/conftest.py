@@ -106,3 +106,29 @@ def headers(utilisateurs):
     from app.security import creer_jeton
 
     return {role: {"Authorization": f"Bearer {creer_jeton(u.id)}"} for role, u in utilisateurs.items()}
+
+
+@pytest.fixture()
+def donnees(db):
+    """Une cliente avec deux prises de mesures, et un petit catalogue."""
+    from datetime import date, timedelta
+
+    from app.models import Client, Mesure, TypeVetement
+
+    fatou = Client(nom="Diop", prenom="Fatou", telephone="771234567")
+    awa = Client(nom="Ba", prenom="Awa", telephone="781112233")
+    boubou = TypeVetement(nom="Boubou", prix_base=35000, delai_jours=10)
+    pantalon = TypeVetement(nom="Pantalon", prix_base=12000, delai_jours=4)
+    retiree = TypeVetement(nom="Ancienne", prix_base=1000, delai_jours=1, actif=False)
+    db.add_all([fatou, awa, boubou, pantalon, retiree])
+    db.flush()
+    ancienne = Mesure(client_id=fatou.id, date_prise=date.today() - timedelta(days=60), tour_taille=80)
+    recente = Mesure(client_id=fatou.id, date_prise=date.today() - timedelta(days=2), tour_taille=82)
+    mesure_awa = Mesure(client_id=awa.id, tour_taille=70)
+    db.add_all([ancienne, recente, mesure_awa])
+    db.commit()
+    return {
+        "fatou": fatou.id, "awa": awa.id, "boubou": boubou.id, "pantalon": pantalon.id,
+        "retiree": retiree.id, "mesure_ancienne": ancienne.id, "mesure_recente": recente.id,
+        "mesure_awa": mesure_awa.id,
+    }

@@ -4,6 +4,8 @@ from datetime import date, timedelta
 from app.models import Commande, Mesure
 from app.models.enums import StatutCommande
 
+URL_COMMANDES = "/api/v1/commandes"
+
 
 def commande_en_base(db, client_id, numero="CMD-2026-00001", statut=StatutCommande.en_attente,
                      montant_total=10000, montant_paye=0, date_commande=None):
@@ -23,3 +25,19 @@ def mesure_en_base(db, client_id, **valeurs):
     db.add(m)
     db.commit()
     return m
+
+
+def corps_commande(d, **autres):
+    return {
+        "client_id": d["fatou"],
+        "lignes": [
+            {"type_vetement_id": d["boubou"], "quantite": 2, "prix_unitaire": 30000},
+            {"type_vetement_id": d["pantalon"]},
+        ],
+        "remise": 2000,
+        **autres,
+    }
+
+
+def creer_commande(client, h, corps):
+    return client.post(URL_COMMANDES, json=corps, headers=h)

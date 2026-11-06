@@ -1,11 +1,12 @@
 import pytest
 
 from app.models import HistoriqueStatut
-from tests.test_commandes import URL, corps_commande, creer, donnees  # noqa: F401  (fixture)
+from tests.factories import URL_COMMANDES as URL
+from tests.factories import corps_commande, creer_commande as creer
 
 
 @pytest.fixture()
-def cid(client, headers, donnees):  # noqa: F811
+def cid(client, headers, donnees):
     return creer(client, headers["accueil"], corps_commande(donnees)).json()["id"]
 
 
