@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import Pagination, get_current_user, require_roles
 from app.models.enums import Genre
-from app.schemas.client import ClientCreate, ClientRead, ClientUpdate
+from app.schemas.client import ClientCreate, ClientRead, ClientResume, ClientUpdate
 from app.schemas.commande import CommandeResume
 from app.schemas.common import Page
 from app.services import clients as service
@@ -64,3 +64,9 @@ def commandes(client_id: int, pagination: Pagination = Depends(), db: Session = 
         items=[vers_resume(c) for c in items], total=total,
         limit=pagination.limit, offset=pagination.offset,
     )
+
+
+@router.get("/{client_id}/resume", response_model=ClientResume,
+            summary="Synthèse du client (commandes annulées exclues)")
+def resume(client_id: int, db: Session = Depends(get_db)):
+    return service.resume_client(db, client_id)

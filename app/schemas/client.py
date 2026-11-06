@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models.enums import Genre
+from app.schemas.commande import CommandeResume
 from app.services.telephone import normaliser_telephone
 
 
@@ -67,3 +68,15 @@ class ClientRead(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class ClientResume(BaseModel):
+    """Synthèse d'un client (commandes annulées exclues)."""
+
+    client_id: int
+    nb_commandes: int
+    chiffre_affaires: int
+    total_paye: int
+    solde_du: int
+    derniere_commande: CommandeResume | None
+    a_des_mesures: bool

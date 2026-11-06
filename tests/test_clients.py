@@ -182,3 +182,36 @@ def test_commandes_du_client_paginees_plus_recente_d_abord(client, headers, db):
 
 def test_commandes_client_inconnu_404(client, headers):
     assert client.get(f"{URL}/9999/commandes", headers=headers["accueil"]).status_code == 404
+
+
+def test_resume_client_exclut_les_commandes_annulees(client, headers, db):
+    from datetime import date, timedelta
+
+    from app.models.enums import StatutCommande
+    from tests.factories import commande_en_base, mesure_en_base
+
+    cid = creer(client, headers["accueil"]).json()["id"]
+    hier = date.today() - timedelta(days=1)
+    commande_en_base(db, cid, "CMD-2026-00001", date_commande=hier, montant_total=50000, montant_paye=20000)
+    commande_en_base(db, cid, "CMD-2026-00002", montant_total=30000, montant_paye=30000)
+    commande_en_base(db, cid, "CMD-2026-00003", statut=StatutCommande.annulee, montant_total=99000, montant_paye=1000)
+
+    r = client.get(f"{URL}/{cid}/resume", headers=headers["tailleur"])
+    assert r.status_code == 200
+    corps = r.json()
+    assert corps["nb_commandes"] == 2
+    assert corps["chiffre_affaires"] == 80000
+    assert corps["total_paye"] == 50000
+    assert corps["solde_du"] == 30000
+    assert corps["derniere_commande"]["numero"] == "CMD-2026-00002"
+    assert corps["a_des_mesures"] is False
+
+    mesure_en_base(db, cid)
+    assert client.get(f"{URL}/{cid}/resume", headers=headers["tailleur"]).json()["a_des_mesures"] is True
+
+
+def test_resume_client_sans_commande_et_404(client, headers):
+    cid = creer(client, headers["accueil"]).json()["id"]
+    corps = client.get(f"{URL}/{cid}/resume", headers=headers["accueil"]).json()
+    assert corps["nb_commandes"] == 0 and corps["solde_du"] == 0 and corps["derniere_commande"] is None
+    assert client.get(f"{URL}/9999/resume", headers=headers["accueil"]).status_code == 404

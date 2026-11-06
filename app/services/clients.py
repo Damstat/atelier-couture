@@ -4,8 +4,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.exceptions import Conflit, DonneesInvalides, Introuvable
-from app.models import Client, Commande
-from app.models.enums import Genre
+from app.models import Client, Commande, Mesure
+from app.models.enums import Genre, StatutCommande
+from app.services.commandes import vers_resume
 from app.services.pagination import paginer
 from app.schemas.client import ClientCreate, ClientUpdate
 
@@ -93,3 +94,25 @@ def commandes_du_client(db: Session, client_id: int, limit: int, offset: int) ->
         .order_by(Commande.date_commande.desc(), Commande.id.desc())
     )
     return paginer(db, requete, limit, offset)
+
+
+def resume_client(db: Session, client_id: int) -> dict:
+    """Synthèse financière du client ; les commandes annulées sont exclues."""
+    obtenir_client(db, client_id)
+    commandes = list(db.scalars(
+        select(Commande)
+        .where(Commande.client_id == client_id, Commande.statut != StatutCommande.annulee)
+        .order_by(Commande.date_commande.desc(), Commande.id.desc())
+    ))
+    chiffre_affaires = sum(c.montant_total for c in commandes)
+    total_paye = sum(c.montant_paye for c in commandes)
+    a_des_mesures = db.scalar(select(Mesure.id).where(Mesure.client_id == client_id).limit(1)) is not None
+    return {
+        "client_id": client_id,
+        "nb_commandes": len(commandes),
+        "chiffre_affaires": chiffre_affaires,
+        "total_paye": total_paye,
+        "solde_du": chiffre_affaires - total_paye,
+        "derniere_commande": vers_resume(commandes[0]) if commandes else None,
+        "a_des_mesures": a_des_mesures,
+    }
