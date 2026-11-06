@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.exceptions import Conflit
+from app.exceptions import Conflit, Introuvable
 from app.models import Utilisateur
 from app.schemas.utilisateur import UtilisateurCreate
 from app.security import hacher_mot_de_passe
@@ -26,4 +26,15 @@ def creer_utilisateur(db: Session, donnees: UtilisateurCreate) -> Utilisateur:
     )
     db.add(utilisateur)
     db.flush()
+    return utilisateur
+
+
+def lister_utilisateurs(db: Session) -> list[Utilisateur]:
+    return list(db.scalars(select(Utilisateur).order_by(Utilisateur.nom_complet, Utilisateur.id)))
+
+
+def obtenir_utilisateur(db: Session, utilisateur_id: int) -> Utilisateur:
+    utilisateur = db.get(Utilisateur, utilisateur_id)
+    if utilisateur is None:
+        raise Introuvable(f"Utilisateur {utilisateur_id} introuvable.")
     return utilisateur

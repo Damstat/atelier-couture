@@ -34,3 +34,19 @@ def test_creer_utilisateur_mot_de_passe_trop_court_422(client, headers):
 def test_creer_utilisateur_role_ou_email_invalide_422(client, headers):
     assert client.post(URL, json={**NOUVEAU, "role": "patron"}, headers=headers["admin"]).status_code == 422
     assert client.post(URL, json={**NOUVEAU, "email": "pas-un-email"}, headers=headers["admin"]).status_code == 422
+
+
+def test_lister_utilisateurs_tries_par_nom(client, headers):
+    r = client.get(URL, headers=headers["admin"])
+    assert r.status_code == 200
+    noms = [u["nom_complet"] for u in r.json()]
+    assert noms == sorted(noms) == ["Awa Accueil", "Moussa Tailleur", "Patron"]
+    assert all("mot_de_passe_hash" not in u for u in r.json())
+
+
+def test_detail_utilisateur_et_404(client, headers, utilisateurs):
+    r = client.get(f"{URL}/{utilisateurs['accueil'].id}", headers=headers["admin"])
+    assert r.status_code == 200 and r.json()["role"] == "accueil"
+    r = client.get(f"{URL}/9999", headers=headers["admin"])
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Utilisateur 9999 introuvable."}

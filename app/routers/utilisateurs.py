@@ -19,3 +19,13 @@ def creer(donnees: UtilisateurCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(utilisateur)
     return utilisateur
+
+
+@router.get("", response_model=list[UtilisateurRead], summary="Liste des comptes (triés par nom)")
+def lister(db: Session = Depends(get_db)):
+    return service.lister_utilisateurs(db)
+
+
+@router.get("/{utilisateur_id}", response_model=UtilisateurRead, summary="Détail d'un compte")
+def detail(utilisateur_id: int, db: Session = Depends(get_db)):
+    return service.obtenir_utilisateur(db, utilisateur_id)
