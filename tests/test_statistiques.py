@@ -96,3 +96,20 @@ def test_chiffre_affaires_parametres_invalides_422(client, headers):
     r = get(client, headers, "chiffre-affaires", date_debut="2026-05-01", date_fin="2026-04-01")
     assert r.status_code == 422 and "date_debut" in r.json()["detail"]
     assert get(client, headers, "chiffre-affaires", granularite="annee").status_code == 422
+
+
+def test_types_vetement_avant_remise_du_plus_eleve_au_plus_faible(client, headers, stats, donnees):
+    r = get(client, headers, "types-vetement")
+    assert r.status_code == 200
+    assert r.json() == [
+        {"type_vetement_id": donnees["boubou"], "nom": "Boubou", "quantite_vendue": 2, "chiffre_affaires": 60000},
+        {"type_vetement_id": donnees["pantalon"], "nom": "Pantalon", "quantite_vendue": 2, "chiffre_affaires": 24000},
+    ]
+
+
+def test_types_vetement_commandes_annulees_exclues(client, headers, stats):
+    debut = (DEBUT_MOIS - timedelta(days=90)).isoformat()
+    r = get(client, headers, "types-vetement", date_debut=debut).json()
+    # Boubou : 2 (c1) + 1 (c4) ; la commande annulée c3 n'est pas comptée
+    assert [(t["nom"], t["quantite_vendue"], t["chiffre_affaires"]) for t in r] == [
+        ("Boubou", 3, 90000), ("Pantalon", 3, 36000)]
