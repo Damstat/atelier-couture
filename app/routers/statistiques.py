@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_roles
-from app.schemas.statistiques import ChiffreAffaires, Granularite, StatTypeVetement, TableauDeBord
+from app.schemas.statistiques import (
+    ChiffreAffaires, Granularite, StatTypeVetement, TableauDeBord, TopClient,
+)
 from app.services import statistiques as service
 
 # Administrateur uniquement
@@ -32,3 +34,9 @@ def chiffre_affaires(granularite: Granularite = "jour", date_debut: date | None 
 def types_vetement(date_debut: date | None = DEBUT, date_fin: date | None = FIN,
                    db: Session = Depends(get_db)):
     return service.par_type_vetement(db, date_debut, date_fin)
+
+
+@router.get("/top-clients", response_model=list[TopClient], summary="Meilleurs clients de la période")
+def top_clients(date_debut: date | None = DEBUT, date_fin: date | None = FIN,
+                limite: int = Query(10, ge=1, le=100), db: Session = Depends(get_db)):
+    return service.top_clients(db, date_debut, date_fin, limite)

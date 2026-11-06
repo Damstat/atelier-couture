@@ -113,3 +113,23 @@ def test_types_vetement_commandes_annulees_exclues(client, headers, stats):
     # Boubou : 2 (c1) + 1 (c4) ; la commande annulée c3 n'est pas comptée
     assert [(t["nom"], t["quantite_vendue"], t["chiffre_affaires"]) for t in r] == [
         ("Boubou", 3, 90000), ("Pantalon", 3, 36000)]
+
+
+def test_top_clients_de_la_periode(client, headers, stats, donnees):
+    r = get(client, headers, "top-clients")
+    assert r.status_code == 200
+    assert r.json() == [
+        {"client_id": donnees["fatou"], "client_nom": "Fatou Diop", "telephone": "771234567",
+         "nb_commandes": 1, "chiffre_affaires": 70000, "solde_du": 50000},
+        {"client_id": donnees["awa"], "client_nom": "Awa Ba", "telephone": "781112233",
+         "nb_commandes": 1, "chiffre_affaires": 12000, "solde_du": 0},
+    ]
+
+
+def test_top_clients_limite_et_periode_large(client, headers, stats):
+    debut = (DEBUT_MOIS - timedelta(days=90)).isoformat()
+    r = get(client, headers, "top-clients", date_debut=debut, limite=1).json()
+    # Fatou : c1 + c5 (c3 annulée exclue) = 82 000 ; Awa : c2 + c4 = 42 000
+    assert len(r) == 1 and r[0]["client_nom"] == "Fatou Diop"
+    assert r[0]["nb_commandes"] == 2 and r[0]["chiffre_affaires"] == 82000 and r[0]["solde_du"] == 62000
+    assert get(client, headers, "top-clients", limite=0).status_code == 422
