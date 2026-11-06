@@ -50,3 +50,44 @@ def test_detail_utilisateur_et_404(client, headers, utilisateurs):
     r = client.get(f"{URL}/9999", headers=headers["admin"])
     assert r.status_code == 404
     assert r.json() == {"detail": "Utilisateur 9999 introuvable."}
+
+
+def test_modifier_utilisateur_champs_envoyes_seulement(client, headers, utilisateurs):
+    uid = utilisateurs["tailleur"].id
+    r = client.patch(f"{URL}/{uid}", json={"nom_complet": "Moussa Diop"}, headers=headers["admin"])
+    assert r.status_code == 200
+    assert r.json()["nom_complet"] == "Moussa Diop"
+    assert r.json()["role"] == "tailleur" and r.json()["actif"] is True
+
+
+def test_modifier_mot_de_passe_puis_connexion(client, headers, utilisateurs):
+    uid = utilisateurs["accueil"].id
+    assert client.patch(f"{URL}/{uid}", json={"mot_de_passe": "nouveau-mdp"}, headers=headers["admin"]).status_code == 200
+    r = client.post("/api/v1/auth/login", data={"username": "accueil@atelier.sn", "password": "nouveau-mdp"})
+    assert r.status_code == 200
+
+
+def test_desactiver_un_compte_le_bloque_immediatement(client, headers, utilisateurs):
+    uid = utilisateurs["tailleur"].id
+    r = client.patch(f"{URL}/{uid}", json={"actif": False}, headers=headers["admin"])
+    assert r.status_code == 200 and r.json()["actif"] is False
+    assert client.get("/api/v1/auth/me", headers=headers["tailleur"]).status_code == 401
+
+
+def test_rg24_admin_ne_peut_pas_se_desactiver(client, headers, utilisateurs):
+    r = client.patch(f"{URL}/{utilisateurs['admin'].id}", json={"actif": False}, headers=headers["admin"])
+    assert r.status_code == 409
+    assert "désactiver votre propre compte" in r.json()["detail"]
+
+
+def test_rg24_admin_ne_peut_pas_retirer_son_role(client, headers, utilisateurs):
+    r = client.patch(f"{URL}/{utilisateurs['admin'].id}", json={"role": "accueil"}, headers=headers["admin"])
+    assert r.status_code == 409
+    assert "rôle d'administrateur" in r.json()["detail"]
+
+
+def test_modifier_utilisateur_null_ou_mdp_court_422_et_404(client, headers, utilisateurs):
+    uid = utilisateurs["tailleur"].id
+    assert client.patch(f"{URL}/{uid}", json={"nom_complet": None}, headers=headers["admin"]).status_code == 422
+    assert client.patch(f"{URL}/{uid}", json={"mot_de_passe": "court"}, headers=headers["admin"]).status_code == 422
+    assert client.patch(f"{URL}/9999", json={"actif": True}, headers=headers["admin"]).status_code == 404

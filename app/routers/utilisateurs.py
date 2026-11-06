@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_roles
-from app.schemas.utilisateur import UtilisateurCreate, UtilisateurRead
+from app.models import Utilisateur
+from app.schemas.utilisateur import UtilisateurCreate, UtilisateurRead, UtilisateurUpdate
 from app.services import utilisateurs as service
 
 # Toutes les routes : administrateur uniquement
@@ -29,3 +30,17 @@ def lister(db: Session = Depends(get_db)):
 @router.get("/{utilisateur_id}", response_model=UtilisateurRead, summary="Détail d'un compte")
 def detail(utilisateur_id: int, db: Session = Depends(get_db)):
     return service.obtenir_utilisateur(db, utilisateur_id)
+
+
+@router.patch("/{utilisateur_id}", response_model=UtilisateurRead,
+              summary="Modifier nom, rôle, état actif ou mot de passe (RG24)")
+def modifier(
+    utilisateur_id: int,
+    donnees: UtilisateurUpdate,
+    db: Session = Depends(get_db),
+    auteur: Utilisateur = Depends(require_roles()),
+):
+    utilisateur = service.modifier_utilisateur(db, utilisateur_id, donnees, auteur)
+    db.commit()
+    db.refresh(utilisateur)
+    return utilisateur
